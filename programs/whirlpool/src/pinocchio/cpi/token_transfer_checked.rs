@@ -1,8 +1,8 @@
 use arrayvec::ArrayVec;
 use pinocchio::{
     account_info::AccountInfo,
-    cpi::invoke_signed_unchecked,
-    instruction::{Account, AccountMeta, Instruction, Signer},
+    cpi::{invoke_signed, invoke_signed_with_bounds},
+    instruction::{AccountMeta, Instruction, Signer},
     ProgramResult,
 };
 
@@ -43,20 +43,11 @@ impl TransferChecked<'_> {
             data: &instruction_data,
         };
 
-        unsafe {
-            invoke_signed_unchecked(
-                &instruction,
-                &[
-                    self.from.into(),
-                    self.mint.into(),
-                    self.to.into(),
-                    self.authority.into(),
-                ],
-                signers,
-            );
-        }
-
-        Ok(())
+        invoke_signed(
+            &instruction,
+            &[self.from, self.mint, self.to, self.authority],
+            signers,
+        )
     }
 }
 
@@ -82,16 +73,16 @@ impl TransferCheckedWithHook<'_, '_> {
         account_metas.push(AccountMeta::readonly_signer(self.authority.key()));
 
         // accounts
-        let mut accounts = ArrayVec::<Account, MAX_TRANSFER_CHECKED_WITH_HOOK_ACCOUNTS>::new();
-        accounts.push(self.from.into());
-        accounts.push(self.mint.into());
-        accounts.push(self.to.into());
-        accounts.push(self.authority.into());
+        let mut accounts = ArrayVec::<&AccountInfo, MAX_TRANSFER_CHECKED_WITH_HOOK_ACCOUNTS>::new();
+        accounts.push(self.from);
+        accounts.push(self.mint);
+        accounts.push(self.to);
+        accounts.push(self.authority);
 
         // add transfer hook accounts
         for acc in self.transfer_hook_accounts.iter() {
             account_metas.push((*acc).into());
-            accounts.push((*acc).into());
+            accounts.push(*acc);
         }
 
         // Instruction data layout:
@@ -109,10 +100,10 @@ impl TransferCheckedWithHook<'_, '_> {
             data: &instruction_data,
         };
 
-        unsafe {
-            invoke_signed_unchecked(&instruction, &accounts, signers);
-        }
-
-        Ok(())
+        invoke_signed_with_bounds::<MAX_TRANSFER_CHECKED_WITH_HOOK_ACCOUNTS>(
+            &instruction,
+            &accounts,
+            signers,
+        )
     }
 }

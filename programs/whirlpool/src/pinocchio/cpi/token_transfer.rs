@@ -1,6 +1,6 @@
 use pinocchio::{
     account_info::AccountInfo,
-    cpi::invoke_signed_unchecked,
+    cpi::invoke_signed,
     instruction::{AccountMeta, Instruction, Signer},
     ProgramResult,
 };
@@ -35,14 +35,6 @@ impl Transfer<'_> {
             data: &instruction_data,
         };
 
-        unsafe {
-            invoke_signed_unchecked(
-                &instruction,
-                &[self.from.into(), self.to.into(), self.authority.into()],
-                signers,
-            );
-        }
-
-        Ok(())
+        invoke_signed(&instruction, &[self.from, self.to, self.authority], signers)
     }
 }
