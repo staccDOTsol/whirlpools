@@ -2,7 +2,11 @@
 import { Connection, PublicKey, TransactionMessage, VersionedTransaction, Keypair, SystemProgram, ComputeBudgetProgram } from "https://esm.sh/@solana/web3.js@1.98.4?bundle";
 import * as C from "./chain.js";
 
-const conn = new Connection(location.origin + "/api/rpc", { commitment: "confirmed", disableRetryOnRateLimit: true });
+// Live state and sends go straight to the RPC (RPC_URL, served by /api/config so the key is
+// not in the repo). History (signatures, transactions) goes through /api/rpc, which caches.
+const LIVE_RPC = await fetch("/api/config").then((r) => r.json()).then((j) => j.rpc).catch(() => null) || location.origin + "/api/rpc";
+const conn = new Connection(LIVE_RPC, { commitment: "confirmed", disableRetryOnRateLimit: true });
+const histConn = new Connection(location.origin + "/api/rpc", { commitment: "confirmed", disableRetryOnRateLimit: true });
 const app = document.getElementById("app");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const short = (k) => { const s = k.toString(); return s.slice(0, 4) + "…" + s.slice(-4); };
@@ -66,7 +70,11 @@ function sheet(html, wire) {
 const closeSheet = () => document.getElementById("sheet")?.remove();
 function showError(e) {
   console.error(e);
-  const msg = e?.logs ? `${e.message}\n${e.logs.slice(-6).join("\n")}` : e?.message || String(e);
+  const logs = e?.logs || e?.transactionLogs || null;
+  let msg = e?.message || String(e);
+  if (e?.code != null) msg = `[${e.code}] ${msg}`;
+  if (e?.transactionMessage) msg += `\n${e.transactionMessage}`;
+  if (logs?.length) msg += `\n\nprogram logs:\n${logs.slice(-12).join("\n")}`;
   const box = document.getElementById("err") || app.insertAdjacentElement("afterbegin", Object.assign(document.createElement("div"), { id: "err", className: "err panel", style: "margin-bottom:12px" }));
   box.textContent = msg;
 }
@@ -115,7 +123,15 @@ async function land(tx, lastValidBlockHeight, step) {
   let delay = 1200, first = true;
   for (;;) {
     try { await conn.sendRawTransaction(raw, { skipPreflight: !first, preflightCommitment: "confirmed", maxRetries: 0 }); }
-    catch (e) { if (first) throw e; /* resubmits may race the landing; the status check decides */ }
+    catch (e) {
+      if (first) {
+        // Preflight failed: attach the logs so the page shows what the program said.
+        let logs = e?.logs || e?.transactionLogs;
+        if (!logs?.length) { try { const sim = await conn.simulateTransaction(tx, { sigVerify: false, commitment: "confirmed" }); logs = sim.value.logs; } catch {} }
+        throw Object.assign(new Error(`transaction ${step + 1} rejected: ${e?.transactionMessage || e?.message || e}`), { logs, code: e?.code });
+      }
+      // resubmits may race the landing; the status check decides
+    }
     first = false;
     await sleep(delay);
     delay = Math.min(delay * 1.5, 4000);
@@ -235,7 +251,7 @@ async function renderLaunch(mintStr) {
     const tiles = isSol ? [0.5, 1, 5] : [10, 50, 250];
     const preview = (amt) => pool ? C.seatPreview(l, pool, amt * 10 ** qdec).tokens / 10 ** r.dec : 0;
     let tape = [];
-    try { tape = await C.fetchTape(conn, l, 25); } catch {}
+    try { tape = await C.fetchTape(histConn, l, 25); } catch (e) { console.warn("tape unavailable", e); }
     let mySeats = [];
     if (wallet.pubkey && pool) {
       const nfts = await wallet.nftMints();

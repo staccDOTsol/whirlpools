@@ -43,17 +43,23 @@ export default async function handler(req, res) {
     forward.push({ i, key, call: c });
   });
   if (forward.length) {
-    const up = await fetch(UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(forward.map((f) => f.call)) });
-    const text = await up.text();
-    let arr;
-    try { arr = JSON.parse(text); } catch { return res.status(502).json({ error: `upstream ${up.status}: ${text.slice(0, 200)}` }); }
-    if (!Array.isArray(arr)) arr = [arr];
-    const byId = new Map(arr.map((r) => [String(r.id), r]));
-    for (const f of forward) {
-      const r = byId.get(String(f.call.id)) ?? { jsonrpc: "2.0", id: f.call.id, error: { code: -32000, message: "no upstream response" } };
+    // Forward each call as a single JSON-RPC object: the public mainnet endpoint rejects
+    // batched sendTransaction ("cannot unmarshal array"), so batching upstream is not safe.
+    await Promise.all(forward.map(async (f) => {
+      let r;
+      try {
+        const up = await fetch(UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(f.call) });
+        const text = await up.text();
+        try { r = JSON.parse(text); } catch { r = { jsonrpc: "2.0", id: f.call.id, error: { code: -32000, message: `upstream ${up.status}: ${text.slice(0, 300)}` } }; }
+        if (Array.isArray(r)) r = r[0];
+        if (!r || typeof r !== "object") r = { jsonrpc: "2.0", id: f.call.id, error: { code: -32000, message: `upstream ${up.status}: ${text.slice(0, 300)}` } };
+      } catch (e) {
+        r = { jsonrpc: "2.0", id: f.call.id, error: { code: -32000, message: `upstream unreachable: ${e.message}` } };
+      }
+      r.id = f.call.id;
       results[f.i] = r;
       if (!r.error) store(f.key, TTL[f.call.method], r);
-    }
+    }));
   }
   res.setHeader("content-type", "application/json");
   res.status(200).send(JSON.stringify(batch ? results : results[0]));
