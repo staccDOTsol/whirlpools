@@ -1,4 +1,5 @@
 // Initialize the adaptive fee tier (tick spacing 128, 1% base) on the launchpad's WhirlpoolsConfig.
+// Created on mainnet 2026-09-25 as 6assHYd5438D91RXfMUrETNqGHmcbfzFCJsBjHmbkeu9 (sig YF6kYX...bw5N).
 // Run on the machine that holds the config's fee authority (12Nqk...):
 //   npm i @orca-so/whirlpools-client@^7 @solana/kit@^5
 //   RPC_URL=https://... node init-adaptive-fee-tier.mjs            (dry run: prints the instruction, no send)

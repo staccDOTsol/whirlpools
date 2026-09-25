@@ -1,0 +1,33 @@
+[package]
+name = "ladder-launch"
+version = "0.1.0"
+edition = "2021"
+description = "Launchpad on Orca Whirlpools: buyers deposit SOL into 90/10 concentrated positions seeded from a fixed token reserve"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+no-entrypoint = []
+test-sbf = []
+
+[dependencies]
+pinocchio = "0.9.2"
+pinocchio-pubkey = "0.3.0"
+pinocchio-system = "0.3"
+pinocchio-token = "0.4"
+uint = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+litesvm = "0.6"
+solana-sdk = "2.2"
+spl-token = { version = "7", features = ["no-entrypoint"] }
+spl-associated-token-account = { version = "6", features = ["no-entrypoint"] }
+serde_json = "1"
+solana-feature-set = "2.2"
+base64 = "0.22"
+
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = ['cfg(target_os, values("solana"))']
