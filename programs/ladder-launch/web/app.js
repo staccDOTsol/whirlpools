@@ -79,7 +79,29 @@ async function sendAll(list, onStep) {
   if (!wallet.pubkey) throw new Error("connect a wallet first");
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
   const txs = list.map(({ ixs, signers = [] }) => { const tx = new Transaction({ feePayer: wallet.pubkey, blockhash, lastValidBlockHeight }); tx.add(...ixs); if (signers.length) tx.partialSign(...signers); return tx; });
-  const signed = await wallet.signAll(txs);
+  // Simulate the first transaction ourselves so a program error shows real logs instead of
+  // the wallet's generic failure. Later ones depend on it landing, so they can't be simulated yet.
+  const sim = await conn.simulateTransaction(txs[0]);
+  if (sim.value.err) throw Object.assign(new Error(`simulation failed: ${JSON.stringify(sim.value.err)}`), { logs: sim.value.logs || [] });
+  let signed;
+  try { signed = await wallet.signAll(txs); }
+  catch (e) {
+    if (/reject|denied|cancel/i.test(e?.message || "")) throw e;
+    console.warn("batch sign failed, retrying once", e);
+    try { signed = await wallet.signAll(txs); }
+    catch (e2) {
+      if (/reject|denied|cancel/i.test(e2?.message || "") || txs.length === 1) throw e2;
+      // Wallet refuses the batch: sign and land one at a time (one prompt each).
+      console.warn("wallet refused batch signing, falling back to one at a time", e2);
+      const sigs = [];
+      for (let i = 0; i < txs.length; i++) {
+        onStep?.(i, txs.length);
+        const [one] = await wallet.signAll([txs[i]]);
+        sigs.push(await land(one, lastValidBlockHeight, i));
+      }
+      return sigs;
+    }
+  }
   const sigs = [];
   for (let i = 0; i < signed.length; i++) {
     onStep?.(i, signed.length);
@@ -329,18 +351,19 @@ async function collect(l, pool, seat) {
 // ---------- create ----------
 const SUPPLY_WHOLE = 1_000_000_000, DECIMALS = 6; // every launch: 1B tokens, 6 decimals
 async function uploadImage(name, file) {
-  // Direct-to-Blob client upload (5 MB) when the project has a read-write token; otherwise
-  // post the bytes to the function, which writes through OIDC (Vercel caps that at 4.5 MB).
-  try {
-    const { upload } = await import("https://esm.sh/@vercel/blob@2.8.0/client");
-    return await upload(`images/${name}`, file, { access: "public", handleUploadUrl: "/api/upload" });
-  } catch (e) {
-    console.warn("client upload unavailable, using server upload", e);
-    if (file.size > 4.5 * 1024 * 1024) throw new Error("image must be under 4.5 MB until the project has a Blob read-write token");
+  // Up to 4.5 MB: post the bytes to the function, which writes through OIDC. Bigger files
+  // go direct-to-Blob as a client upload, which needs a read-write token on the project.
+  if (file.size <= 4.5 * 1024 * 1024) {
     const r = await fetch(`/api/upload?name=${encodeURIComponent(name)}&type=${encodeURIComponent(file.type)}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "image upload failed");
     return j;
+  }
+  try {
+    const { upload } = await import("https://esm.sh/@vercel/blob@2.8.0/client");
+    return await upload(`images/${name}`, file, { access: "public", handleUploadUrl: "/api/upload" });
+  } catch (e) {
+    throw new Error("images over 4.5 MB need the project's Blob read-write token; use a smaller image for now");
   }
 }
 function renderCreate() {
