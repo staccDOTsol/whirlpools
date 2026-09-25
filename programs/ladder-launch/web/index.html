@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ladder Launch</title>
+<meta name="description" content="Launchpad on Orca Whirlpools. Deposit, get a seat, cash out any time.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%232fd27a'/%3E%3Cpath d='M3 12h3V8M7 12h3V5M11 12h3V2' fill='none' stroke='%230f1214' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root { --bg:#0f1214; --panel:#12161a; --panel2:#1c2226; --border:#22282c; --border2:#2c3439; --text:#e9edf0; --muted:#93a0a8; --accent:#2fd27a; --exit:#f0a0a0; --heat:#ff8a3d; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font-family:"IBM Plex Sans",system-ui,sans-serif; font-size:14px; }
+  a { color:#6fd4a3; text-decoration:none; } a:hover { color:#9be8c2; }
+  button, input, select, textarea { font:inherit; color:inherit; }
+  .mono { font-family:"IBM Plex Mono",monospace; }
+  .display { font-family:Archivo,sans-serif; font-weight:800; letter-spacing:-0.01em; }
+  .muted { color:var(--muted); }
+  .accent { color:var(--accent); } .exit { color:var(--exit); } .heat { color:var(--heat); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+  @keyframes pop { 0%{transform:scale(.94);opacity:0} 60%{transform:scale(1.03);opacity:1} 100%{transform:scale(1)} }
+  header { display:flex; align-items:center; gap:12px; padding:0 16px; height:60px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:5; }
+  header .mark { width:28px; height:28px; border-radius:8px; background:var(--accent); display:flex; align-items:center; justify-content:center; flex:none; }
+  header .brand { font-size:18px; }
+  header .live { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); white-space:nowrap; }
+  header .live i { width:8px; height:8px; border-radius:4px; background:var(--accent); animation:blink 1.2s infinite; }
+  header .spacer { flex:1; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:40px; padding:0 16px; border-radius:10px; border:1px solid var(--border2); background:transparent; color:var(--text); font-weight:500; cursor:pointer; white-space:nowrap; }
+  .btn:hover { background:var(--panel2); } .btn:disabled { opacity:.5; cursor:default; }
+  .btn.solid { background:var(--panel2); border-color:transparent; }
+  .btn.primary { background:var(--accent); color:#0f1214; border-color:transparent; font-family:Archivo,sans-serif; font-weight:800; }
+  .btn.danger { background:var(--exit); color:#0f1214; border-color:transparent; font-family:Archivo,sans-serif; font-weight:800; }
+  main { max-width:1280px; margin:0 auto; padding:20px 16px 40px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; }
+  .tabs { display:flex; gap:4px; }
+  .tabs button { height:40px; padding:0 14px; border-radius:10px; border:0; background:transparent; color:var(--muted); font-weight:600; cursor:pointer; }
+  .tabs button.on { background:var(--panel2); color:var(--text); }
+  .row { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:14px; background:var(--panel); border:1px solid var(--border); color:inherit; }
+  .row:hover { border-color:var(--border2); color:inherit; }
+  .row.hot { border-color:#3a2414; }
+  .avatar { width:44px; height:44px; border-radius:12px; background:var(--panel2); object-fit:cover; flex:none; display:flex; align-items:center; justify-content:center; font-family:Archivo,sans-serif; font-weight:800; color:var(--muted); }
+  .list { display:flex; flex-direction:column; gap:10px; margin-top:14px; }
+  .bar { height:4px; border-radius:2px; background:var(--panel2); overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
+  .bar.heat i { background:var(--heat); }
+  .big { font-family:"IBM Plex Mono",monospace; font-size:34px; font-weight:500; line-height:1.1; }
+  .grid { display:grid; grid-template-columns:minmax(0,1fr) 400px; gap:24px; }
+  @media (max-width: 900px) { .grid { grid-template-columns:1fr; } .big { font-size:28px; } }
+  .tiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+  .tile { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:88px; border-radius:14px; border:1px solid var(--border2); background:var(--panel2); cursor:pointer; padding:10px; }
+  .tile:hover { border-color:var(--accent); }
+  .tile.main { background:var(--accent); color:#0f1214; border-color:transparent; }
+  .tile b { font-family:Archivo,sans-serif; font-weight:800; font-size:24px; }
+  .tile small { font-size:11px; opacity:.8; }
+  .two { display:grid; gap:12px; grid-template-columns:1fr 1fr; }
+  @media (max-width: 600px) { .two { grid-template-columns:1fr; } .two > * { grid-column:auto !important; } header .live b { display:none; } .hide-sm { display:none; } header { padding:0 12px; gap:8px; } header .btn { padding:0 12px; } main { padding:16px 16px 32px; } }
+  .field { display:flex; flex-direction:column; gap:6px; }
+  .field label { font-size:12px; color:var(--muted); font-weight:600; }
+  .input { height:44px; border-radius:10px; border:1px solid var(--border2); background:var(--bg); padding:0 12px; width:100%; }
+  textarea.input { height:auto; padding:10px 12px; resize:vertical; }
+  .flash { animation:pop .3s ease-out; border-radius:14px; background:#123a25; border:1px solid var(--accent); padding:14px; }
+  .tape { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; scrollbar-width:none; }
+  .tape span { flex:none; display:inline-flex; gap:6px; align-items:center; padding:6px 10px; border-radius:8px; background:var(--panel2); font-family:"IBM Plex Mono",monospace; font-size:12px; }
+  .chart { position:relative; width:100%; aspect-ratio:16/9; min-height:280px; border-radius:14px; overflow:hidden; background:var(--panel); border:1px solid var(--border); }
+  .chart iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .seat { display:flex; flex-direction:column; gap:8px; padding:12px 14px; border-radius:14px; background:var(--panel2); }
+  .seat .gain { font-family:Archivo,sans-serif; font-weight:800; font-size:24px; }
+  .seat .actions { display:flex; gap:8px; }
+  .seat .actions .btn { flex:1; height:40px; }
+  .err { color:var(--exit); font-size:13px; white-space:pre-wrap; word-break:break-word; }
+  footer { border-top:1px solid var(--border); padding:16px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:center; font-size:12px; color:var(--muted); }
+  .dot { width:6px; height:6px; border-radius:3px; background:var(--muted); display:inline-block; }
+  .sheet { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:flex-end; justify-content:center; z-index:10; }
+  .sheet > div { width:100%; max-width:480px; background:var(--panel); border:1px solid var(--border); border-radius:18px 18px 0 0; padding:18px 16px 28px; }
+  @media (min-width: 600px) { .sheet { align-items:center; } .sheet > div { border-radius:18px; } }
+  .empty { padding:40px 16px; text-align:center; color:var(--muted); }
+  .kv { display:flex; justify-content:space-between; gap:12px; font-size:13px; } .kv b { font-family:"IBM Plex Mono",monospace; font-weight:500; text-align:right; overflow-wrap:anywhere; }
+</style>
+</head>
+<body>
+<header>
+  <a href="#/" style="display:flex;align-items:center;gap:10px;color:inherit">
+    <span class="mark"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#0f1214" stroke-width="2" stroke-linecap="round"><path d="M3 12h3V8M7 12h3V5M11 12h3V2"/></svg></span>
+    <span class="brand display">Ladder</span>
+  </a>
+  <span class="live" id="live"><i></i>LIVE</span>
+  <span class="spacer"></span>
+  <a class="btn" href="#/create">Launch<span class="hide-sm"> a token</span></a>
+  <button class="btn solid mono" id="wallet-btn">Connect</button>
+</header>
+<main id="app"><div class="empty">Loading…</div></main>
+<footer>
+  <span>Ladder Launch · seats on Orca Whirlpools</span>
+  <span class="dot"></span>
+  <a id="program-link" href="#" target="_blank" rel="noopener">program</a>
+  <span class="dot"></span>
+  <a href="https://github.com/staccDOTsol/whirlpools/tree/claude/vigilant-shannon-k5vxb4" target="_blank" rel="noopener">source · github.com/staccDOTsol/whirlpools @ claude/vigilant-shannon-k5vxb4</a>
+</footer>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

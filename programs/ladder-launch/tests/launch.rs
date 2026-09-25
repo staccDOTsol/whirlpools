@@ -153,7 +153,7 @@ impl Env {
         ata_for(user, &self.quote_mint, &self.quote_program)
     }
     fn user_token(&self, user: &Pubkey) -> Pubkey {
-        ata_for(user, &self.token_mint.pubkey(), &spl_token::id())
+        ata_for(user, &self.token_mint.pubkey(), &TOKEN_2022)
     }
     /// Fund `user` with lamports and `amount` of the quote in their ATA (wrapped SOL or minted Token-2022).
     fn new_user(&mut self, amount: u64) -> Keypair {
@@ -162,7 +162,7 @@ impl Env {
         let q = self.user_quote(&user.pubkey());
         let mut ixs = vec![
             spl_associated_token_account::instruction::create_associated_token_account(&user.pubkey(), &user.pubkey(), &self.quote_mint, &self.quote_program),
-            spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user.pubkey(), &user.pubkey(), &self.token_mint.pubkey(), &spl_token::id()),
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user.pubkey(), &user.pubkey(), &self.token_mint.pubkey(), &TOKEN_2022),
         ];
         match self.quote {
             Quote::Wsol => {
@@ -211,6 +211,10 @@ fn create_launch_args() -> Vec<u8> {
     data.extend((-2432i32).to_le_bytes());
     data.extend(500u16.to_le_bytes());
     data.extend(5000u16.to_le_bytes());
+    for s in ["Test Token", "TEST", "https://example.com/meta.json"] {
+        data.push(s.len() as u8);
+        data.extend(s.as_bytes());
+    }
     data
 }
 
@@ -246,7 +250,7 @@ fn setup(quote: Quote, token_is_a: bool) -> Env {
         }
     };
     let launch = pda(&[b"launch", token_mint.pubkey().as_ref()], &program_id());
-    let reserve_vault = ata_for(&launch, &token_mint.pubkey(), &spl_token::id());
+    let reserve_vault = ata_for(&launch, &token_mint.pubkey(), &TOKEN_2022);
     let quote_vault = ata_for(&launch, &quote_mint, &quote_program);
     let (mint_a, mint_b) = if token_is_a { (token_mint.pubkey(), quote_mint) } else { (quote_mint, token_mint.pubkey()) };
     let whirlpool = pda(&[b"whirlpool", CONFIG.as_ref(), mint_a.as_ref(), mint_b.as_ref(), &1032u16.to_le_bytes()], &WHIRLPOOL);
@@ -301,8 +305,29 @@ fn setup(quote: Quote, token_is_a: bool) -> Env {
     );
     env.must("create_launch", &[create], &[&creator_kp, &mint_kp]);
     assert_eq!(env.token_balance(&reserve_vault), SUPPLY);
-    let mint = spl_token::state::Mint::unpack(&env.svm.get_account(&mint_pk).unwrap().data).unwrap();
+    let mint_acc = env.svm.get_account(&mint_pk).unwrap();
+    assert_eq!(mint_acc.owner, TOKEN_2022, "launch token is Token-2022");
+    let mint = spl_token::state::Mint::unpack_from_slice(&mint_acc.data[..82]).unwrap();
     assert!(mint.mint_authority.is_none(), "mint authority must be revoked");
+    assert!(mint.freeze_authority.is_none(), "no freeze authority, ever");
+    assert_eq!(mint.supply, SUPPLY);
+    // TokenMetadata TLV (type 19) starts with update_authority: must be the zero key (none).
+    let tlv = &mint_acc.data[166..];
+    let mut o = 0;
+    let mut found = false;
+    while o + 4 <= tlv.len() {
+        let (ty, len) = (u16::from_le_bytes([tlv[o], tlv[o + 1]]) as usize, u16::from_le_bytes([tlv[o + 2], tlv[o + 3]]) as usize);
+        if ty == 19 {
+            assert_eq!(&tlv[o + 4..o + 36], &[0u8; 32], "metadata update authority must be none");
+            found = true;
+            break;
+        }
+        if ty == 0 { break; }
+        o += 4 + len;
+    }
+    assert!(found, "TokenMetadata extension present");
+    assert!(mint_acc.data.windows(10).any(|w| w == b"Test Token"), "metadata lives in the mint");
+    assert!(mint_acc.data.windows(29).any(|w| w == b"https://example.com/meta.json"), "uri lives in the mint");
 
     // 1 init_pool: same token price either way (price is B per A, so flip the tick when the token is B)
     let initial_tick = if token_is_a { INITIAL_TICK_A } else { -INITIAL_TICK_A };
@@ -534,9 +559,9 @@ fn buy(env: &mut Env, buyer: &Keypair, amount: u64) -> litesvm::types::Transacti
     data.push(a_to_b as u8);
     data.push(0); // remaining_accounts_info None
     let (mint_a, mint_b, owner_a, owner_b, prog_a, prog_b) = if env.token_is_a {
-        (env.token_mint.pubkey(), env.quote_mint, env.user_token(&buyer.pubkey()), env.user_quote(&buyer.pubkey()), spl_token::id(), env.quote_program)
+        (env.token_mint.pubkey(), env.quote_mint, env.user_token(&buyer.pubkey()), env.user_quote(&buyer.pubkey()), TOKEN_2022, env.quote_program)
     } else {
-        (env.quote_mint, env.token_mint.pubkey(), env.user_quote(&buyer.pubkey()), env.user_token(&buyer.pubkey()), env.quote_program, spl_token::id())
+        (env.quote_mint, env.token_mint.pubkey(), env.user_quote(&buyer.pubkey()), env.user_token(&buyer.pubkey()), env.quote_program, TOKEN_2022)
     };
     let (va, vb) = env.vaults_ab();
     let swap = Instruction {
@@ -672,7 +697,7 @@ fn rejects_transfer_hook_quote() {
             ws(creator.pubkey()),
             w(launch),
             ws(token_mint.pubkey()),
-            w(ata_for(&launch, &token_mint.pubkey(), &spl_token::id())),
+            w(ata_for(&launch, &token_mint.pubkey(), &TOKEN_2022)),
             r(hooked),
             w(ata_for(&launch, &hooked, &TOKEN_2022)),
             r(Keypair::new().pubkey()),

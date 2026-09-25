@@ -1,0 +1,6 @@
+{
+  "functions": { "api/rpc.js": { "maxDuration": 30 }, "api/upload.js": { "maxDuration": 30 } },
+  "headers": [
+    { "source": "/(.*)\\.(js|css)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=60" }] }
+  ]
+}

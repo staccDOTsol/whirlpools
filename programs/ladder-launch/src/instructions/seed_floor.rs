@@ -79,7 +79,7 @@ pub fn process(accounts: &[AccountInfo], _args: &[u8]) -> ProgramResult {
 
     let bump_bytes = [launch.bump];
     let ls = cpi::LaunchSigner::new(token_mint.key(), &bump_bytes);
-    let s = sides(token_is_a, token_mint, quote_mint, reserve_vault, quote_vault, token_program, quote_token_program);
+    let s = sides(token_is_a, token_mint, quote_mint, reserve_vault, quote_vault, token_2022_program, quote_token_program);
     cpi::initialize_dynamic_tick_array(whirlpool, creator, tick_array_lower, system_program, whirlpool_program, math::tick_array_start(tick_lower, TICK_SPACING))?;
     cpi::initialize_dynamic_tick_array(whirlpool, creator, tick_array_upper, system_program, whirlpool_program, math::tick_array_start(tick_upper, TICK_SPACING))?;
     cpi::open_position_with_token_extensions(

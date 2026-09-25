@@ -39,6 +39,7 @@ pub fn process(accounts: &[AccountInfo], _args: &[u8]) -> ProgramResult {
     same(token_mint, &launch.token_mint, LaunchError::InvalidMint)?;
     same(quote_mint, &launch.quote_mint, LaunchError::InvalidMint)?;
     let quote_token_program = resolve_quote_program(&launch.quote_token_program, token_program, token_2022_program)?;
+    cpi::check_program(token_2022_program, &crate::constants::TOKEN_2022_PROGRAM)?;
     same(whirlpool, &launch.whirlpool, LaunchError::InvalidWhirlpool)?;
     same(reserve_vault, &launch.reserve_vault, LaunchError::InvalidVault)?;
     same(quote_vault, &launch.quote_vault, LaunchError::InvalidVault)?;
@@ -53,7 +54,7 @@ pub fn process(accounts: &[AccountInfo], _args: &[u8]) -> ProgramResult {
 
     let bump_bytes = [launch.bump];
     let ls = cpi::LaunchSigner::new(token_mint.key(), &bump_bytes);
-    let s = sides(launch.has(FLAG_TOKEN_IS_A), token_mint, quote_mint, reserve_vault, quote_vault, token_program, quote_token_program);
+    let s = sides(launch.has(FLAG_TOKEN_IS_A), token_mint, quote_mint, reserve_vault, quote_vault, token_2022_program, quote_token_program);
     let t0 = token_account_of(reserve_vault, &launch.token_mint, launch_info.key())?;
     let q0 = token_account_of(quote_vault, &launch.quote_mint, launch_info.key())?;
     cpi::update_fees_and_rewards(whirlpool, bundled_position, tick_array_lower, tick_array_upper, whirlpool_program)?;
@@ -62,7 +63,7 @@ pub fn process(accounts: &[AccountInfo], _args: &[u8]) -> ProgramResult {
     let fees_token = cpi::token_amount(reserve_vault)?.saturating_sub(t0);
     let fees_quote = cpi::token_amount(quote_vault)?.saturating_sub(q0);
     token_account_of(user_token_account, &launch.token_mint, user.key())?;
-    cpi::token_transfer(reserve_vault, user_token_account, launch_info, fees_token, &[ls.signer()])?;
+    cpi::transfer_checked(token_2022_program, reserve_vault, token_mint, user_token_account, launch_info, fees_token, cpi::mint_decimals(token_mint)?, &[ls.signer()])?;
     cpi::transfer_checked(quote_token_program, quote_vault, quote_mint, user_quote, launch_info, fees_quote, launch.quote_decimals, &[ls.signer()])
 }
 

@@ -11,6 +11,9 @@ PDA owns the Whirlpool position; the depositor gets a plain SPL NFT that is the 
   launch's liquidity per minute (the first exit in a window always passes).
 * A slice of the reserve (`floor_bps`) sits in a permanently locked token-only position so
   there is always an ask; its fees split creator/treasury.
+* The launch token is a Token-2022 mint with its metadata inside the mint (MetadataPointer
+  to itself plus TokenMetadata: name, symbol, uri; no update authority). The mint and freeze
+  authorities are explicitly revoked once the fixed supply is in the reserve.
 * Any quote works: SPL Token or Token-2022 without transfer hooks, permanent delegates, close
   authority, default-frozen state, confidential transfer, non-transferability or pausing.
   Either mint ordering is handled.
@@ -19,15 +22,24 @@ PDA owns the Whirlpool position; the depositor gets a plain SPL NFT that is the 
   (tick spacing 128, 1% base). Tick arrays are dynamic and created lazily by deposits.
 
 Instructions (tag byte first): `0 create_launch`, `1 init_pool`, `2 new_bundle`, `3 seed_floor`,
-`4 deposit`, `5 exit`, `6 collect_fees`, `7 collect_floor_fees`. Account lists are documented
-at the top of each file in `src/instructions/`.
+`4 deposit`, `5 exit`, `6 collect_fees`, `7 collect_floor_fees`. Account lists and argument
+layouts are documented at the top of each file in `src/instructions/`.
+
+Program id: `6drxnwCC6coNFcB9vNAyCC7wZWLqJrSfoMGZ78G8eEkG` (keypair in `target/deploy/`).
+Front end: `web/` (deployed at https://ladderlaunch.fun). Design boards: `design/`.
 
 ## Build and test
 
 ```
 cargo build-sbf
 RPC_URL=https://<mainnet rpc> python3 tests/fixtures/fetch_whirlpool.py   # once
-cargo test
+cargo test                                                                  # from this directory
+```
+
+Deploy (mainnet, ~0.67 SOL rent at 128 KiB):
+
+```
+solana program deploy target/deploy/ladder_launch.so --program-id target/deploy/ladder_launch-keypair.json --max-len 131072 --with-compute-unit-price 20000 -u m
 ```
 
 The integration tests run the whole lifecycle on litesvm against the mainnet Whirlpool binary,

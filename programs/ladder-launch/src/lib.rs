@@ -22,14 +22,30 @@ pub mod instructions;
 pub mod math;
 pub mod state;
 
-pinocchio_pubkey::declare_id!("GJViDKnTV3pZMwgMCqjwj1hC8JozuJR69QntyVGeGrj8");
+pinocchio_pubkey::declare_id!("6drxnwCC6coNFcB9vNAyCC7wZWLqJrSfoMGZ78G8eEkG");
 
 #[cfg(not(feature = "no-entrypoint"))]
 pinocchio::program_entrypoint!(process_instruction, { pinocchio::MAX_TX_ACCOUNTS });
 #[cfg(not(feature = "no-entrypoint"))]
 pinocchio::default_allocator!();
-#[cfg(not(feature = "no-entrypoint"))]
-pinocchio::nostd_panic_handler!();
+/// `no_std` panic handler. Same body as `pinocchio::nostd_panic_handler!` minus the
+/// `#[no_mangle]` attribute, which rustc >= 1.95 rejects on lang items.
+#[cfg(all(not(feature = "no-entrypoint"), target_os = "solana"))]
+#[panic_handler]
+fn panic_handler(info: &core::panic::PanicInfo<'_>) -> ! {
+    if let Some(location) = info.location() {
+        unsafe {
+            pinocchio::syscalls::sol_panic_(
+                location.file().as_ptr(),
+                location.file().len() as u64,
+                location.line() as u64,
+                location.column() as u64,
+            )
+        }
+    } else {
+        unsafe { pinocchio::syscalls::abort() }
+    }
+}
 
 pub fn process_instruction(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     if program_id != &ID {

@@ -42,6 +42,7 @@ pub fn process(accounts: &[AccountInfo], _args: &[u8]) -> ProgramResult {
     same(token_mint, &launch.token_mint, LaunchError::InvalidMint)?;
     same(quote_mint, &launch.quote_mint, LaunchError::InvalidMint)?;
     let quote_token_program = resolve_quote_program(&launch.quote_token_program, token_program, token_2022_program)?;
+    cpi::check_program(token_2022_program, &crate::constants::TOKEN_2022_PROGRAM)?;
     same(whirlpool, &launch.whirlpool, LaunchError::InvalidWhirlpool)?;
     same(reserve_vault, &launch.reserve_vault, LaunchError::InvalidVault)?;
     same(quote_vault, &launch.quote_vault, LaunchError::InvalidVault)?;
@@ -52,7 +53,7 @@ pub fn process(accounts: &[AccountInfo], _args: &[u8]) -> ProgramResult {
 
     let bump_bytes = [launch.bump];
     let ls = cpi::LaunchSigner::new(token_mint.key(), &bump_bytes);
-    let s = sides(launch.has(FLAG_TOKEN_IS_A), token_mint, quote_mint, reserve_vault, quote_vault, token_program, quote_token_program);
+    let s = sides(launch.has(FLAG_TOKEN_IS_A), token_mint, quote_mint, reserve_vault, quote_vault, token_2022_program, quote_token_program);
     let t0 = token_account_of(reserve_vault, &launch.token_mint, launch_info.key())?;
     let q0 = token_account_of(quote_vault, &launch.quote_mint, launch_info.key())?;
     cpi::update_fees_and_rewards(whirlpool, position, tick_array_lower, tick_array_upper, whirlpool_program)?;
@@ -64,8 +65,9 @@ pub fn process(accounts: &[AccountInfo], _args: &[u8]) -> ProgramResult {
     let creator_t = (fees_token as u128 * bps / 10_000) as u64;
     let creator_q = (fees_quote as u128 * bps / 10_000) as u64;
     let dec = launch.quote_decimals;
-    cpi::token_transfer(reserve_vault, creator_token, launch_info, creator_t, &[ls.signer()])?;
-    cpi::token_transfer(reserve_vault, treasury_token, launch_info, fees_token - creator_t, &[ls.signer()])?;
+    let td = cpi::mint_decimals(token_mint)?;
+    cpi::transfer_checked(token_2022_program, reserve_vault, token_mint, creator_token, launch_info, creator_t, td, &[ls.signer()])?;
+    cpi::transfer_checked(token_2022_program, reserve_vault, token_mint, treasury_token, launch_info, fees_token - creator_t, td, &[ls.signer()])?;
     cpi::transfer_checked(quote_token_program, quote_vault, quote_mint, creator_quote, launch_info, creator_q, dec, &[ls.signer()])?;
     cpi::transfer_checked(quote_token_program, quote_vault, quote_mint, treasury_quote, launch_info, fees_quote - creator_q, dec, &[ls.signer()])
 }

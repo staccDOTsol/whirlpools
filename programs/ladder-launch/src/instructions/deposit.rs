@@ -51,6 +51,7 @@ pub fn process(accounts: &[AccountInfo], args: &[u8]) -> ProgramResult {
     same(token_mint, &launch.token_mint, LaunchError::InvalidMint)?;
     same(quote_mint, &launch.quote_mint, LaunchError::InvalidMint)?;
     let quote_token_program = resolve_quote_program(&launch.quote_token_program, token_program, token_2022_program)?;
+    cpi::check_program(token_2022_program, &TOKEN_2022_PROGRAM)?;
     same(whirlpool, &launch.whirlpool, LaunchError::InvalidWhirlpool)?;
     same(reserve_vault, &launch.reserve_vault, LaunchError::InvalidVault)?;
     same(quote_vault, &launch.quote_vault, LaunchError::InvalidVault)?;
@@ -67,7 +68,7 @@ pub fn process(accounts: &[AccountInfo], args: &[u8]) -> ProgramResult {
     }
     let quote_before = token_account_of(quote_vault, &launch.quote_mint, launch_info.key())?;
     let token_is_a = launch.has(FLAG_TOKEN_IS_A);
-    let s = sides(token_is_a, token_mint, quote_mint, reserve_vault, quote_vault, token_program, quote_token_program);
+    let s = sides(token_is_a, token_mint, quote_mint, reserve_vault, quote_vault, token_2022_program, quote_token_program);
 
     // ---- range and liquidity from the current pool price. The token side is the open
     // ---- ladder (up to the top when the token is A, down to the bottom when it is B);

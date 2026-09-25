@@ -47,6 +47,7 @@ pub fn process(accounts: &[AccountInfo], args: &[u8]) -> ProgramResult {
         drop(launch);
         resolve_quote_program(&p, token_program, token_2022_program)?
     };
+    cpi::check_program(token_2022_program, &TOKEN_2022_PROGRAM)?;
     same(config, &WHIRLPOOLS_CONFIG, LaunchError::InvalidProgram)?;
     same(fee_tier, &ADAPTIVE_FEE_TIER, LaunchError::InvalidProgram)?;
 
@@ -55,7 +56,7 @@ pub fn process(accounts: &[AccountInfo], args: &[u8]) -> ProgramResult {
         return Err(LaunchError::InvalidArgs.into());
     }
     let sqrt_price = math::sqrt_price_from_tick_index(initial_tick);
-    let s = sides(token_is_a, token_mint, quote_mint, token_vault_kp, quote_vault_kp, token_program, quote_token_program);
+    let s = sides(token_is_a, token_mint, quote_mint, token_vault_kp, quote_vault_kp, token_2022_program, quote_token_program);
     let (badge_a, badge_b) = if token_is_a { (token_badge, quote_badge) } else { (quote_badge, token_badge) };
 
     cpi::initialize_pool_with_adaptive_fee(

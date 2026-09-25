@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ladder Launch boards</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root { --bg:#0f1214; --panel:#12161a; --border:#22282c; --text:#e9edf0; --muted:#93a0a8; --accent:#2fd27a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"IBM Plex Sans",system-ui,sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:0 24px; height:60px; border-bottom:1px solid var(--border); }
+  .mark { width:28px; height:28px; border-radius:8px; background:var(--accent); display:flex; align-items:center; justify-content:center; }
+  h1 { font-family:Archivo,sans-serif; font-weight:800; font-size:18px; margin:0; letter-spacing:-0.01em; }
+  header span { color:var(--muted); font-size:13px; }
+  header a { margin-left:auto; color:var(--muted); font-size:13px; text-decoration:none; }
+  header a:hover { color:var(--text); }
+  main { padding:24px; display:grid; gap:24px; grid-template-columns:repeat(auto-fill, minmax(360px, 1fr)); }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+  .card.wide { grid-column:1 / -1; }
+  .head { display:flex; align-items:baseline; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); }
+  .head b { font-family:Archivo,sans-serif; font-weight:800; font-size:15px; }
+  .head code { font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); }
+  .head a { margin-left:auto; font-size:13px; color:var(--accent); text-decoration:none; }
+  .frame { position:relative; width:100%; overflow:hidden; background:var(--bg); }
+  .frame iframe { position:absolute; top:0; left:0; border:0; transform-origin:0 0; }
+  @media (max-width: 420px) { main { padding:16px; gap:16px; grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="mark"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#0f1214" stroke-width="2" stroke-linecap="round"><path d="M3 12h3V8M7 12h3V5M11 12h3V2"/></svg></div>
+  <h1>Ladder Launch</h1>
+  <span>UI design boards · click any board to open it full size</span>
+  <a href="README.md">design notes</a>
+</header>
+<main id="boards"></main>
+<script>
+  const boards = [
+    ['Main.dc.html', 'Launch page', 1280, 920],
+    ['Create.dc.html', 'Create a launch', 1280, 760],
+    ['Exit.dc.html', 'Cash-out sheet', 480, 600],
+    ['PhoneList.dc.html', 'Phone: launches', 390, 844],
+    ['Phone.dc.html', 'Phone: launch page', 390, 1100],
+    ['PhoneExit.dc.html', 'Phone: cash-out sheet', 390, 844],
+    ['PhoneCreate.dc.html', 'Phone: create a launch', 390, 1240],
+  ];
+  const main = document.getElementById('boards');
+  for (const [file, title, w, h] of boards) {
+    const card = document.createElement('section');
+    card.className = 'card' + (w > 600 ? ' wide' : '');
+    card.innerHTML = `
+      <div class="head"><b>${title}</b><code>${w}×${h}</code><a href="${file}">open ↗</a></div>
+      <div class="frame"><iframe src="${file}" width="${w}" height="${h}" loading="lazy" title="${title}"></iframe></div>`;
+    main.appendChild(card);
+  }
+  function fit() {
+    document.querySelectorAll('.frame').forEach((f) => {
+      const ifr = f.querySelector('iframe');
+      const w = +ifr.getAttribute('width'), h = +ifr.getAttribute('height');
+      const s = Math.min(1, f.clientWidth / w);
+      ifr.style.transform = `scale(${s})`;
+      f.style.height = Math.round(h * s) + 'px';
+    });
+  }
+  new ResizeObserver(fit).observe(main);
+  fit();
+</script>
+</body>
+</html>

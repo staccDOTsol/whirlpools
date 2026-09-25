@@ -648,6 +648,99 @@ pub fn create_mint(payer: &AccountInfo, mint: &AccountInfo, decimals: u8, mint_a
     pinocchio_token::instructions::InitializeMint2 { mint, decimals, mint_authority, freeze_authority: None }.invoke()
 }
 
+/// Token-2022 mint whose metadata lives in the mint itself: a MetadataPointer to the mint
+/// and the TokenMetadata extension (name, symbol, uri) with no update authority, so it is
+/// immutable. `launch` is the temporary mint authority and signs the metadata initialize.
+#[allow(clippy::too_many_arguments)]
+pub fn create_mint_2022_with_metadata(
+    payer: &AccountInfo,
+    mint: &AccountInfo,
+    launch: &AccountInfo,
+    decimals: u8,
+    name: &[u8],
+    symbol: &[u8],
+    uri: &[u8],
+    system_program: &AccountInfo,
+    token_2022_program: &AccountInfo,
+    signers: &[Signer],
+) -> ProgramResult {
+    check_program(token_2022_program, &TOKEN_2022_PROGRAM)?;
+    if name.is_empty() || name.len() > 32 || symbol.is_empty() || symbol.len() > 10 || uri.len() > 200 {
+        return Err(LaunchError::InvalidArgs.into());
+    }
+    // Mint (82) padded to 165, account type (1), MetadataPointer TLV (2 + 2 + 64).
+    const MINT_WITH_POINTER: usize = 165 + 1 + 2 + 2 + 64;
+    // TokenMetadata's Initialize reallocs the mint and needs the lamports for the final size
+    // already there: TLV header (4) + update_authority (32) + mint (32) + three borsh strings
+    // + empty additional_metadata vec (4).
+    let final_len = MINT_WITH_POINTER + 4 + 32 + 32 + (4 + name.len()) + (4 + symbol.len()) + (4 + uri.len()) + 4;
+    let rent = pinocchio::sysvars::rent::Rent::get()?;
+    pinocchio_system::instructions::CreateAccount {
+        from: payer,
+        to: mint,
+        lamports: rent.minimum_balance(final_len),
+        space: MINT_WITH_POINTER as u64,
+        owner: &TOKEN_2022_PROGRAM,
+    }
+    .invoke()?;
+
+    // MetadataPointerExtension (39) / Initialize (0): authority None, metadata_address = mint.
+    let mut ptr = [0u8; 66];
+    ptr[0] = 39;
+    ptr[34..66].copy_from_slice(mint.key().as_ref());
+    invoke(&TOKEN_2022_PROGRAM, &[w(mint)], &[mint], &ptr, &[])?;
+
+    // InitializeMint2 (20): decimals, mint authority = launch, freeze authority = launch.
+    // Both are explicitly revoked by create_launch once the supply is minted.
+    let mut im = [0u8; 67];
+    im[0] = 20;
+    im[1] = decimals;
+    im[2..34].copy_from_slice(launch.key().as_ref());
+    im[34] = 1;
+    im[35..67].copy_from_slice(launch.key().as_ref());
+    invoke(&TOKEN_2022_PROGRAM, &[w(mint)], &[mint], &im, &[])?;
+
+    // spl_token_metadata_interface Initialize (sha256("spl_token_metadata_interface:initialize_account")[..8]):
+    // metadata account = mint, update authority = launch for now (a zero key is rejected here),
+    // mint authority signs.
+    let mut md = [0u8; 8 + 12 + 32 + 10 + 200];
+    md[..8].copy_from_slice(&[210, 225, 30, 162, 88, 184, 77, 141]);
+    let mut n = 8usize;
+    for s in [name, symbol, uri] {
+        md[n..n + 4].copy_from_slice(&(s.len() as u32).to_le_bytes());
+        n += 4;
+        md[n..n + s.len()].copy_from_slice(s);
+        n += s.len();
+    }
+    let metas = [w(mint), r(launch), r(mint), rs(launch)];
+    invoke(&TOKEN_2022_PROGRAM, &metas, &[mint, launch, mint, launch], &md[..n], signers)?;
+
+    // UpdateAuthority (sha256("spl_token_metadata_interface:update_the_authority")[..8]) to none:
+    // zeroed new_authority bytes mean None here, so the metadata becomes immutable.
+    let mut ua = [0u8; 40];
+    ua[..8].copy_from_slice(&[215, 228, 166, 228, 84, 100, 86, 123]);
+    let _ = system_program;
+    invoke(&TOKEN_2022_PROGRAM, &[w(mint), rs(launch)], &[mint, launch], &ua, signers)
+}
+
+/// Token-2022 MintTo.
+pub fn mint_to_2022(mint: &AccountInfo, account: &AccountInfo, authority: &AccountInfo, amount: u64, signers: &[Signer]) -> ProgramResult {
+    let mut d = [0u8; 9];
+    d[0] = 7;
+    d[1..].copy_from_slice(&amount.to_le_bytes());
+    invoke(&TOKEN_2022_PROGRAM, &[w(mint), w(account), rs(authority)], &[mint, account, authority], &d, signers)
+}
+
+/// Token-2022 SetAuthority(MintTokens, None).
+pub fn revoke_mint_authority_2022(mint: &AccountInfo, authority: &AccountInfo, signers: &[Signer]) -> ProgramResult {
+    invoke(&TOKEN_2022_PROGRAM, &[w(mint), rs(authority)], &[mint, authority], &[6, 0, 0], signers)
+}
+
+/// Token-2022 SetAuthority(FreezeAccount, None).
+pub fn revoke_freeze_authority_2022(mint: &AccountInfo, authority: &AccountInfo, signers: &[Signer]) -> ProgramResult {
+    invoke(&TOKEN_2022_PROGRAM, &[w(mint), rs(authority)], &[mint, authority], &[6, 1, 0], signers)
+}
+
 pub fn mint_to(mint: &AccountInfo, account: &AccountInfo, mint_authority: &AccountInfo, amount: u64, signers: &[Signer]) -> ProgramResult {
     pinocchio_token::instructions::MintTo { mint, account, mint_authority, amount }.invoke_signed(signers)
 }
