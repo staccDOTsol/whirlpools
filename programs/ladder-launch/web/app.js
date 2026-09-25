@@ -70,15 +70,20 @@ function sheet(html, wire) {
 }
 const closeSheet = () => document.getElementById("sheet")?.remove();
 function showError(e) {
-  console.error(e);
+  console.error("[ladder]", e);
   const logs = e?.logs || e?.transactionLogs || null;
   let msg = e?.message || String(e);
   if (e?.code != null) msg = `[${e.code}] ${msg}`;
   if (e?.transactionMessage) msg += `\n${e.transactionMessage}`;
   if (logs?.length) msg += `\n\nprogram logs:\n${logs.slice(-12).join("\n")}`;
-  const box = document.getElementById("err") || app.insertAdjacentElement("afterbegin", Object.assign(document.createElement("div"), { id: "err", className: "err panel", style: "margin-bottom:12px" }));
-  box.textContent = msg;
+  // Lives outside <main>, so in-place redraws never wipe it; cleared on route change or ×.
+  const box = document.getElementById("errbox");
+  box.hidden = false;
+  box.innerHTML = `<div><button aria-label="dismiss">×</button><span></span></div>`;
+  box.querySelector("span").textContent = msg;
+  box.querySelector("button").onclick = () => { box.hidden = true; box.innerHTML = ""; };
 }
+const clearError = () => { const box = document.getElementById("errbox"); box.hidden = true; box.innerHTML = ""; };
 
 // ---------- transactions ----------
 const cu = (units, microLamports = 50_000) => [ComputeBudgetProgram.setComputeUnitLimit({ units }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports })];
@@ -92,8 +97,10 @@ async function sendAll(list, onStep) {
   const txs = list.map(({ ixs }) => new VersionedTransaction(new TransactionMessage({ payerKey: wallet.pubkey, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message()));
   // Simulate the first one so a program error shows real logs instead of the wallet's
   // generic failure. Later ones depend on it landing, so they can't be simulated yet.
+  console.log("[ladder] simulating", txs.length, "tx");
   const sim = await conn.simulateTransaction(txs[0], { sigVerify: false, commitment: "confirmed" });
   if (sim.value.err) throw Object.assign(new Error(`simulation failed: ${JSON.stringify(sim.value.err)}`), { logs: sim.value.logs || [] });
+  console.log("[ladder] requesting wallet signature via", wallet.provider?.isPhantom ? "Phantom" : wallet.provider?.constructor?.name || "provider");
   let signed;
   try { signed = await wallet.signAll(txs); }
   catch (e) {
@@ -409,7 +416,15 @@ async function renderLaunch(mintStr) {
         </div>
       </div>`);
     const seatsById = new Map(mySeats.map((m) => [m.s.pubkey.toBase58(), m.s]));
-    const run = async (label, fn) => { state.busy = label; state.armed = null; await draw(); try { await fn(); } catch (e) { showError(e); } state.busy = false; state.fresh = true; launchCache.at = 0; wallet.nfts = null; await draw(); };
+    const run = async (label, fn) => {
+      console.log("[ladder]", label);
+      clearError();
+      state.busy = label; state.armed = null;
+      try { await draw(); } catch (e) { console.warn("[ladder] pre-action redraw failed", e); }
+      try { await fn(); } catch (e) { showError(e); }
+      state.busy = false; state.fresh = true; launchCache.at = 0; wallet.nfts = null;
+      try { await draw(); } catch (e) { console.warn("[ladder] post-action redraw failed", e); }
+    };
     app.querySelectorAll("[data-amt]").forEach((b) => (b.onclick = () => seat(+b.dataset.amt)));
     document.getElementById("custom-go").onclick = () => { const v = parseFloat(document.getElementById("custom").value); if (v > 0) seat(v); };
     const seat = (amt) => { if (!wallet.pubkey) return connectFlow(); run(`Seating ${amt} ${quote}…`, async () => { const res = await deposit(l, pool, amt); state.flash = { ...res, amount: amt }; }); };
@@ -578,7 +593,7 @@ function renderCreate() {
 
 // ---------- router ----------
 function route() {
-  document.getElementById("err")?.remove();
+  clearError();
   const h = location.hash || "#/";
   const m = h.match(/^#\/launch\/([1-9A-HJ-NP-Za-km-z]+)/);
   if (m) return renderLaunch(m[1]);
