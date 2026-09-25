@@ -1,0 +1,127 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Create.dc.html": {
+      "h": 760,
+      "is_interactive": true,
+      "title": "Create a launch",
+      "w": 1280,
+      "x": 0,
+      "y": 1040
+    },
+    "Exit.dc.html": {
+      "h": 600,
+      "title": "Cash-out sheet",
+      "w": 480,
+      "x": 1360,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "h": 920,
+      "is_interactive": true,
+      "title": "Launch page",
+      "w": 1280,
+      "x": 0,
+      "y": 0
+    },
+    "Phone.dc.html": {
+      "h": 1100,
+      "is_interactive": true,
+      "title": "Phone: launch page",
+      "w": 390,
+      "x": 470,
+      "y": 1940
+    },
+    "PhoneCreate.dc.html": {
+      "h": 1240,
+      "is_interactive": true,
+      "title": "Phone: create a launch",
+      "w": 390,
+      "x": 1410,
+      "y": 1940
+    },
+    "PhoneExit.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "Phone: cash-out sheet",
+      "w": 390,
+      "x": 940,
+      "y": 1940
+    },
+    "PhoneList.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "Phone: launches",
+      "w": 390,
+      "x": 0,
+      "y": 1940
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-25T10:20:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "chart": {
+      "fill": "blue",
+      "text": "Chart slot: in production this is the GeckoTerminal / CoinGecko trading-terminal iframe for the Whirlpool pool address. Nothing custom to build.",
+      "w": 480,
+      "x": 1360,
+      "y": 880
+    },
+    "mobile": {
+      "fill": "blue",
+      "text": "Mobile rules used across these screens: one column, 16 px gutters, 44 px minimum targets, the primary button pinned above the thumb zone, sheets instead of modals, wallet connect via Mobile Wallet Adapter or a deeplink into Phantom/Solflare in-app browsers. Links between the phone boards are wired: tap Exit, Launch a token, or a launch row in Play.",
+      "w": 360,
+      "x": 1880,
+      "y": 1940
+    },
+    "row1": {
+      "kind": "title1",
+      "maxW": 1840,
+      "text": "Trade a launch: one tap, numbers shout, copy whispers",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "row2": {
+      "kind": "title1",
+      "maxW": 1280,
+      "text": "Deploy a launch: any token, any quote",
+      "w": 240,
+      "x": 0,
+      "y": 740
+    },
+    "row3": {
+      "kind": "title1",
+      "maxW": 1800,
+      "text": "Every flow on a phone: list \u2192 seat \u2192 exit, and create",
+      "w": 240,
+      "x": 0,
+      "y": 1640
+    },
+    "ethos": {
+      "x": 1360,
+      "y": 640,
+      "w": 480,
+      "text": "Ethos: fast fast dopamine fast. Seat tiles are one tap with no confirm step and no amount field (custom is tucked away). The gain is the biggest thing on every seat card and on the cash-out sheet. A live tape of the last seats, a HOT chip with a heat bar, a blinking LIVE dot and a 0:41 reset countdown keep the page moving. Every action ends in a green pop: SEATED #149, or 1.42 SOL in your wallet. Explanations are one line behind How it works.",
+      "fill": "teal"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Exit.dc.html",
+    "Create.dc.html",
+    "PhoneList.dc.html",
+    "Phone.dc.html",
+    "PhoneExit.dc.html",
+    "PhoneCreate.dc.html"
+  ],
+  "pages": [],
+  "title": "Ladder Launch App"
+}

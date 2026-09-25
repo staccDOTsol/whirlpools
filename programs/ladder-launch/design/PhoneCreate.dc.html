@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create a launch, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;background:#0f1214;color:#e9edf0;font-family:"IBM Plex Sans",system-ui,sans-serif}
+a{color:#e9edf0}a:hover{color:#ffffff}
+input{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 1240px; box-sizing: border-box; background: #0f1214; display: flex; flex-direction: column; gap: 16px; padding: 8px 16px 24px; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #e9edf0">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; height: 44px">
+    <a href="PhoneList.dc.html" aria-label="Back to launches" style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: #1c2226; color: #e9edf0; text-decoration: none">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+    </a>
+    <span style="font-family: Archivo, sans-serif; font-weight: 800; font-size: 16px">Launch a token</span>
+    <span style="width: 44px"></span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="name" style="font-size: 12px; color: #93a0a8">Name</label>
+      <input id="name" value="Breaking" style="height: 48px; padding: 0 14px; border-radius: 10px; background: #12161a; border: 1px solid #2c3439; outline: 0; box-sizing: border-box; font-size: 16px">
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="sym" style="font-size: 12px; color: #93a0a8">Symbol</label>
+      <input id="sym" value="CNN" style="height: 48px; padding: 0 14px; border-radius: 10px; background: #12161a; border: 1px solid #2c3439; outline: 0; box-sizing: border-box; font-size: 16px; font-family: 'IBM Plex Mono', monospace">
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <label for="quote" style="font-size: 12px; color: #93a0a8">Quote token · paste any mint</label>
+    <div style="display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px; border-radius: 10px; background: #12161a; border: 1px solid #2c3439; box-sizing: border-box">
+      <input id="quote" value="{{quote}}" onInput="{{onQuote}}" style="flex-grow: 1; min-width: 0; background: transparent; border: 0; outline: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+      <span style="font-size: 11px; font-weight: 600; color: #2fd27a; padding: 3px 7px; border-radius: 6px; background: #14261c; white-space: nowrap">{{quoteStatus}}</span>
+    </div>
+    <div style="display: flex; gap: 8px">
+      <button onClick="{{useSol}}" style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #2c3439; background: transparent; color: #e9edf0; font: inherit; font-size: 13px; cursor: pointer">SOL</button>
+      <button onClick="{{useUsdc}}" style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #2c3439; background: transparent; color: #e9edf0; font: inherit; font-size: 13px; cursor: pointer">USDC</button>
+      <button onClick="{{paste}}" style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #2c3439; background: transparent; color: #e9edf0; font: inherit; font-size: 13px; cursor: pointer">Paste</button>
+    </div>
+    <div style="font-size: 12px; color: #93a0a8; line-height: 1.5">SPL or Token-2022. Hooks, permanent delegates and freezable mints are refused.</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <label for="mcap" style="font-size: 12px; color: #93a0a8">Opening market cap</label>
+    <div style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 14px; border-radius: 10px; background: #12161a; border: 1px solid #2c3439; box-sizing: border-box">
+      <input id="mcap" value="{{mcap}}" onInput="{{onMcap}}" style="flex-grow: 1; min-width: 0; background: transparent; border: 0; outline: 0; font-family: 'IBM Plex Mono', monospace; font-size: 16px">
+      <span style="font-size: 13px; color: #93a0a8">SOL</span>
+    </div>
+    <div style="display: flex; gap: 8px">
+      <button onClick="{{m100}}" style="flex-grow: 1; height: 40px; border-radius: 10px; border: 1px solid #2c3439; background: transparent; color: #e9edf0; font: inherit; font-size: 13px; cursor: pointer">100</button>
+      <button onClick="{{m411}}" style="flex-grow: 1; height: 40px; border-radius: 10px; border: 1px solid #2c3439; background: transparent; color: #e9edf0; font: inherit; font-size: 13px; cursor: pointer">411</button>
+      <button onClick="{{m1000}}" style="flex-grow: 1; height: 40px; border-radius: 10px; border: 1px solid #2c3439; background: transparent; color: #e9edf0; font: inherit; font-size: 13px; cursor: pointer">1000</button>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <label for="floor" style="font-size: 12px; color: #93a0a8">Locked floor</label>
+    <div style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 14px; border-radius: 10px; background: #12161a; border: 1px solid #2c3439; box-sizing: border-box">
+      <input id="floor" value="{{floor}}" onInput="{{onFloor}}" style="flex-grow: 1; min-width: 0; background: transparent; border: 0; outline: 0; font-family: 'IBM Plex Mono', monospace; font-size: 16px">
+      <span style="font-size: 13px; color: #93a0a8">% of supply</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+    <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: #12161a; border: 1px solid #22282c">
+      <span style="font-size: 12px; color: #93a0a8">Tokens per SOL at open</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 17px">{{tokensPerUnit}}</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: #12161a; border: 1px solid #22282c">
+      <span style="font-size: 12px; color: #93a0a8">Reserve clears at</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 17px">{{clearAt}} SOL</span>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: #12161a; border: 1px solid #22282c; font-size: 14px; line-height: 1.5">
+    <div style="display: flex; gap: 10px"><span style="font-family: 'IBM Plex Mono', monospace; color: #2fd27a; flex: none">1</span><span>1B tokens minted into the reserve, mint revoked. No dev wallet.</span></div>
+    <div style="display: flex; gap: 10px"><span style="font-family: 'IBM Plex Mono', monospace; color: #2fd27a; flex: none">2</span><span>Pool opens at your market cap with a {{floor}}% locked sell-only floor.</span></div>
+    <div style="display: flex; gap: 10px"><span style="font-family: 'IBM Plex Mono', monospace; color: #2fd27a; flex: none">3</span><span>Seats open at market price until the reserve is gone. Trading is live from the first one.</span></div>
+    <div style="display: flex; gap: 10px"><span style="font-family: 'IBM Plex Mono', monospace; color: #2fd27a; flex: none">4</span><span>You earn half the floor's fees. 1% adaptive fee, 1 minute seat age, 10% of the book may exit per minute.</span></div>
+  </div>
+
+  <div style="flex-grow: 1"></div>
+  <button style="height: 52px; border-radius: 12px; border: 0; background: #2fd27a; color: #0f1214; font: inherit; font-family: Archivo, sans-serif; font-weight: 800; font-size: 16px; cursor: pointer">Launch · about 0.05 SOL rent</button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { quote: 'So11111111111111111111111111111111111111112', mcap: '411', floor: '5' }; }
+  renderVals() {
+    const mcap = parseFloat(this.state.mcap) || 0;
+    const floor = parseFloat(this.state.floor) || 0;
+    const isSol = this.state.quote.startsWith('So111');
+    const perUnit = mcap > 0 ? (9 * 1e9 / mcap) : 0;
+    const setM = (v) => () => this.setState({ mcap: v });
+    return {
+      quote: this.state.quote,
+      onQuote: (e) => this.setState({ quote: e.target.value }),
+      useSol: () => this.setState({ quote: 'So11111111111111111111111111111111111111112' }),
+      useUsdc: () => this.setState({ quote: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' }),
+      paste: () => {},
+      quoteStatus: isSol ? 'SOL' : 'no hooks',
+      mcap: this.state.mcap,
+      onMcap: (e) => this.setState({ mcap: e.target.value }),
+      m100: setM('100'), m411: setM('411'), m1000: setM('1000'),
+      floor: this.state.floor,
+      onFloor: (e) => this.setState({ floor: e.target.value }),
+      tokensPerUnit: perUnit >= 1e6 ? (perUnit / 1e6).toFixed(1) + 'M' : Math.round(perUnit).toLocaleString(),
+      clearAt: (mcap * (1 - floor / 100) / 9).toFixed(1),
+    };
+  }
+}
+</script>
+</body>
+</html>

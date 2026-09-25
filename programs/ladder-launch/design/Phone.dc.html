@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ladder launch page, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;background:#0f1214;color:#e9edf0;font-family:"IBM Plex Sans",system-ui,sans-serif}
+a{color:#6fd4a3}a:hover{color:#9be8c2}
+button{font:inherit;color:inherit}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes pop{0%{transform:scale(.94);opacity:0}60%{transform:scale(1.03);opacity:1}100%{transform:scale(1)}}
+</style>
+</helmet>
+<div style="width: 390px; height: 1100px; box-sizing: border-box; background: #0f1214; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 20px; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #e9edf0">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; height: 44px">
+    <a href="PhoneList.dc.html" aria-label="Back to launches" style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: #1c2226; color: #e9edf0; text-decoration: none">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+    </a>
+    <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #93a0a8"><span style="width: 8px; height: 8px; border-radius: 4px; background: #2fd27a; animation: blink 1.2s infinite"></span>LIVE · 148 seats</span>
+    <button style="height: 44px; padding: 0 12px; border-radius: 10px; border: 0; background: #1c2226; font-size: 13px; font-family: 'IBM Plex Mono', monospace">7xKq…3fPm</button>
+  </div>
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="font-family: Archivo, sans-serif; font-weight: 800; font-size: 24px; letter-spacing: -0.02em">BREAKING</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #93a0a8; padding: 3px 7px; border-radius: 6px; background: #1c2226">CNN</span>
+      </div>
+      <span style="font-size: 12px; color: #93a0a8">SOL · 233 in book · 62% reserve left</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0">
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 500; line-height: 1; letter-spacing: -0.02em">{{mcap}}</span>
+      <span style="font-family: Archivo, sans-serif; font-weight: 800; font-size: 20px; color: #2fd27a; line-height: 1.2">+31%</span>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #1d140d; border: 1px solid #3a2414">
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="#ff8a3d" aria-hidden="true"><path d="M8 1c1 3 4 4 4 8a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-4 0-7z"/></svg>
+    <span style="font-family: Archivo, sans-serif; font-weight: 800; font-size: 14px; color: #ff8a3d">HOT</span>
+    <span style="font-size: 13px; color: #e9edf0">14 seats last minute</span>
+    <div style="flex-grow: 1; height: 6px; border-radius: 3px; background: #2a1c12; overflow: hidden"><div style="width: 78%; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #ff8a3d, #ffc46b)"></div></div>
+  </div>
+
+  <div style="height: 170px; border-radius: 14px; border: 1px solid #22282c; background: #12161a; display: flex; flex-direction: column; overflow: hidden">
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; font-size: 12px; color: #93a0a8">
+      <span><span style="padding: 3px 7px; border-radius: 6px; background: #1c2226; color: #e9edf0">1m</span> 5m 1h</span>
+      <span>GeckoTerminal</span>
+    </div>
+    <svg viewBox="0 0 360 130" preserveAspectRatio="none" style="width: 100%; height: 100%; display: block" aria-hidden="true">
+      <path d="M0 116 L30 108 L60 112 L90 92 L120 98 L150 76 L180 84 L210 62 L240 70 L270 46 L300 54 L330 30 L360 22" fill="none" stroke="#2fd27a" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M0 116 L30 108 L60 112 L90 92 L120 98 L150 76 L180 84 L210 62 L240 70 L270 46 L300 54 L330 30 L360 22 L360 130 L0 130Z" fill="#2fd27a" fill-opacity="0.1"/>
+    </svg>
+  </div>
+
+  <div style="display: flex; gap: 6px; overflow: hidden; white-space: nowrap">
+    <sc-for list="{{tape}}" as="t" hint-placeholder-count="4">
+      <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 8px; background: #12161a; border: 1px solid #22282c; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #93a0a8; flex: none"><span style="color: {{t.color}}; font-weight: 500">{{t.what}}</span>{{t.who}} · {{t.ago}}</span>
+    </sc-for>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+    <button onClick="{{seat05}}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 96px; border-radius: 14px; border: 1px solid #2c3439; background: #12161a; cursor: pointer">
+      <span style="font-family: Archivo, sans-serif; font-weight: 800; font-size: 28px; line-height: 1">0.5</span>
+      <span style="font-size: 11px; color: #93a0a8">SOL</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #2fd27a">{{t05}} CNN</span>
+    </button>
+    <button onClick="{{seat1}}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 96px; border-radius: 14px; border: 0; background: #2fd27a; color: #0f1214; cursor: pointer">
+      <span style="font-family: Archivo, sans-serif; font-weight: 800; font-size: 28px; line-height: 1">1</span>
+      <span style="font-size: 11px; opacity: 0.75">SOL</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500">{{t1}} CNN</span>
+    </button>
+    <button onClick="{{seat5}}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 96px; border-radius: 14px; border: 1px solid #2c3439; background: #12161a; cursor: pointer">
+      <span style="font-family: Archivo, sans-serif; font-weight: 800; font-size: 28px; line-height: 1">5</span>
+      <span style="font-size: 11px; color: #93a0a8">SOL</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #2fd27a">{{t5}} CNN</span>
+    </button>
+  </div>
+  <div style="display: flex; justify-content: space-between; font-size: 12px; color: #93a0a8; padding: 0 2px">
+    <span>Tap = seated. No confirm.</span>
+    <a href="#" style="color: #93a0a8; text-decoration: none">Custom amount</a>
+  </div>
+
+  <sc-if value="{{flashOn}}" hint-placeholder-val="{{false}}">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #14261c; border: 1px solid #2fd27a; animation: pop .35s ease-out">
+      <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="#2fd27a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l3 3 7-7"/></svg>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-family: Archivo, sans-serif; font-weight: 800; font-size: 16px">SEATED · #{{flashIndex}}</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #93a0a8">{{flashSol}} SOL → {{flashTokens}} CNN · earning from now</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 0 2px">
+      <span style="font-family: Archivo, sans-serif; font-weight: 800; font-size: 15px">Your seats</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2fd27a">+0.42 SOL · fees 0.41</span>
+    </div>
+    <sc-for list="{{seats}}" as="seat" hint-placeholder-count="2">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 14px; background: #12161a; border: 1px solid #22282c">
+        <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; flex-grow: 1">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 500; color: {{seat.color}}; line-height: 1.1">{{seat.pct}}</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #93a0a8">#{{seat.index}} · {{seat.in}} → {{seat.now}} SOL · {{seat.age}}</span>
+        </div>
+        <button onClick="{{seat.collect}}" style="height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid #2c3439; background: transparent; font-size: 13px; font-weight: 500; cursor: pointer; flex: none">+{{seat.fees}}</button>
+        <a href="PhoneExit.dc.html" style="height: 44px; padding: 0 12px; display: inline-flex; align-items: center; border-radius: 10px; border: 0; background: #f0a0a0; color: #0f1214; text-decoration: none; font-size: 13px; font-weight: 600; flex: none">Cash out</a>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display: flex; justify-content: space-between; font-size: 12px; color: #93a0a8; padding: 0 2px">
+    <span>Exit room <span style="font-family: 'IBM Plex Mono', monospace; color: #e9edf0">7.2%</span> · resets <span style="font-family: 'IBM Plex Mono', monospace; color: #e9edf0">0:41</span></span>
+    <a href="#" style="color: #93a0a8; text-decoration: none">How it works →</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tokensPerSol":{"editor":"float","default":21.4,"unit":"M","section":"Market"},"mcapUsd":{"editor":"int","default":48600,"unit":"$","section":"Market"},"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { flash: null, next: 149 }; }
+  renderVals() {
+    const perSol = this.props.tokensPerSol ?? 21.4;
+    const mcap = this.props.mcapUsd ?? 48600;
+    const fmtM = (n) => n >= 1000 ? (n / 1000).toFixed(2) + 'B' : n.toFixed(1) + 'M';
+    const fmtK = (n) => n >= 1000 ? '$' + (n / 1000).toFixed(1) + 'k' : '$' + n;
+    const seat = (sol) => () => this.setState({ flash: { sol, tokens: fmtM(sol * perSol), index: this.state.next }, next: this.state.next + 1 });
+    const f = this.state.flash;
+    return {
+      mcap: fmtK(mcap),
+      t05: fmtM(0.5 * perSol), t1: fmtM(1 * perSol), t5: fmtM(5 * perSol),
+      seat05: seat(0.5), seat1: seat(1), seat5: seat(5),
+      flashOn: !!f, flashIndex: f ? f.index : '', flashSol: f ? f.sol : '', flashTokens: f ? f.tokens : '',
+      tape: [
+        { what: '+1 SOL', who: '7xKq…3fPm', ago: '4s', color: '#2fd27a' },
+        { what: '+0.5', who: 'Hn2a…9kLd', ago: '11s', color: '#2fd27a' },
+        { what: 'out 0.3', who: 'B9tt…q2Wm', ago: '19s', color: '#f0a0a0' },
+        { what: '+5 SOL', who: 'Gq4x…Zm1n', ago: '26s', color: '#2fd27a' },
+        { what: '+1 SOL', who: '2Fbe…7Nqa', ago: '40s', color: '#2fd27a' },
+      ],
+      seats: [
+        { index: 12, in: '1.00', now: '1.42', pct: '+42%', color: '#2fd27a', age: '3h', fees: '0.31', collect: () => {} },
+        { index: 97, in: '0.50', now: '0.50', pct: '+0%', color: '#93a0a8', age: '12m', fees: '0.10', collect: () => {} },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
