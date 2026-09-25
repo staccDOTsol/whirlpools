@@ -327,6 +327,7 @@ async function collect(l, pool, seat) {
 }
 
 // ---------- create ----------
+const SUPPLY_WHOLE = 1_000_000_000, DECIMALS = 6; // every launch: 1B tokens, 6 decimals
 async function uploadImage(name, file) {
   // Direct-to-Blob client upload (5 MB) when the project has a read-write token; otherwise
   // post the bytes to the function, which writes through OIDC (Vercel caps that at 4.5 MB).
@@ -361,14 +362,13 @@ function renderCreate() {
             <div class="muted" style="font-size:12px">Any SPL or Token-2022 mint without transfer hooks, permanent delegate, close authority, default-frozen, confidential, non-transferable or pausable extensions.</div></div>
           <div class="field"><label>Opening market cap (quote units)</label><input class="input mono" name="mcap" inputmode="decimal" value="411" required></div>
           <div class="field"><label>Floor (% of reserve, locked forever)</label><input class="input mono" name="floor" inputmode="decimal" value="5" required></div>
-          <div class="field"><label>Supply</label><input class="input mono" name="supply" inputmode="numeric" value="1000000000" required></div>
-          <div class="field"><label>Decimals</label><input class="input mono" name="decimals" inputmode="numeric" value="6" required></div>
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:14px">
         <div class="panel" style="display:flex;flex-direction:column;gap:8px">
           <div class="display" style="font-size:16px">What gets created</div>
           <div class="kv"><span class="muted">Token-2022 mint</span><b>metadata in mint</b></div>
+          <div class="kv"><span class="muted">Supply</span><b>1B · 6 decimals · fixed</b></div>
           <div class="kv"><span class="muted">Whirlpool</span><b>ts 128 · 1% adaptive</b></div>
           <div class="kv"><span class="muted">Floor position</span><b>permanent lock</b></div>
           <div class="kv"><span class="muted">Seat rules</span><b>60s min age · 10%/min exit cap</b></div>
@@ -382,8 +382,8 @@ function renderCreate() {
   const form = document.getElementById("create");
   const sel = form.quoteSel, custom = form.quoteMint;
   sel.onchange = () => (custom.style.display = sel.value === "custom" ? "" : "none");
-  const tpq = () => { const m = parseFloat(form.mcap.value), s = parseFloat(form.supply.value); document.getElementById("tpq").textContent = m > 0 && s > 0 ? `${fmtTok(9 * s / m)} per quote (90/10 seat)` : "—"; };
-  form.mcap.oninput = form.supply.oninput = tpq; tpq();
+  const tpq = () => { const m = parseFloat(form.mcap.value); document.getElementById("tpq").textContent = m > 0 ? `${fmtTok(9 * SUPPLY_WHOLE / m)} per quote (90/10 seat)` : "—"; };
+  form.mcap.oninput = tpq; tpq();
   form.onsubmit = async (e) => {
     e.preventDefault();
     if (!wallet.pubkey) return connectFlow();
@@ -396,8 +396,8 @@ function renderCreate() {
       if (!file) throw new Error("pick an image");
       if (file.size > 5 * 1024 * 1024) throw new Error("image must be under 5 MB");
       const quoteMint = sel.value === "sol" ? C.WSOL : sel.value === "usdc" ? C.USDC : new PublicKey(custom.value.trim());
-      const decimals = parseInt(form.decimals.value), supplyWhole = parseFloat(form.supply.value), mcap = parseFloat(form.mcap.value), floorPct = parseFloat(form.floor.value);
-      if (!(decimals >= 0 && decimals <= 9) || !(supplyWhole > 0) || !(mcap > 0) || !(floorPct >= 0 && floorPct < 50)) throw new Error("check supply, decimals, market cap and floor");
+      const decimals = DECIMALS, supplyWhole = SUPPLY_WHOLE, mcap = parseFloat(form.mcap.value), floorPct = parseFloat(form.floor.value);
+      if (!(mcap > 0) || !(floorPct >= 0 && floorPct < 50)) throw new Error("check market cap and floor");
       step("Uploading image…");
       const img = await uploadImage(`${symbol.toLowerCase()}-${file.name}`, file);
       step("Writing metadata…");
