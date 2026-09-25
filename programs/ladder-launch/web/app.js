@@ -1,5 +1,5 @@
 // Ladder Launch front end. Every figure on screen is read from mainnet through /api/rpc.
-import { Connection, PublicKey, Transaction, Keypair, SystemProgram, ComputeBudgetProgram } from "https://esm.sh/@solana/web3.js@1.98.4?bundle";
+import { Connection, PublicKey, TransactionMessage, VersionedTransaction, Keypair, SystemProgram, ComputeBudgetProgram } from "https://esm.sh/@solana/web3.js@1.98.4?bundle";
 import * as C from "./chain.js";
 
 const conn = new Connection(location.origin + "/api/rpc", { commitment: "confirmed", disableRetryOnRateLimit: true });
@@ -74,14 +74,19 @@ function showError(e) {
 // ---------- transactions ----------
 const cu = (units, microLamports = 50_000) => [ComputeBudgetProgram.setComputeUnitLimit({ units }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports })];
 async function sendAll(list, onStep) {
-  // One wallet prompt for every transaction, then each one is submitted in order and
-  // resubmitted with a small backoff until it lands (or the blockhash expires).
+  // v0 transactions. One wallet prompt for the whole set (signAllTransactions), then each
+  // one is submitted in order and resubmitted with a small backoff until it lands.
   if (!wallet.pubkey) throw new Error("connect a wallet first");
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
-  const txs = list.map(({ ixs, signers = [] }) => { const tx = new Transaction({ feePayer: wallet.pubkey, blockhash, lastValidBlockHeight }); tx.add(...ixs); if (signers.length) tx.partialSign(...signers); return tx; });
-  // Simulate the first transaction ourselves so a program error shows real logs instead of
-  // the wallet's generic failure. Later ones depend on it landing, so they can't be simulated yet.
-  const sim = await conn.simulateTransaction(txs[0]);
+  const txs = list.map(({ ixs, signers = [] }) => {
+    const msg = new TransactionMessage({ payerKey: wallet.pubkey, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message();
+    const tx = new VersionedTransaction(msg);
+    if (signers.length) tx.sign(signers);
+    return tx;
+  });
+  // Simulate the first one so a program error shows real logs instead of the wallet's
+  // generic failure. Later ones depend on it landing, so they can't be simulated yet.
+  const sim = await conn.simulateTransaction(txs[0], { sigVerify: false, commitment: "confirmed" });
   if (sim.value.err) throw Object.assign(new Error(`simulation failed: ${JSON.stringify(sim.value.err)}`), { logs: sim.value.logs || [] });
   let signed;
   try { signed = await wallet.signAll(txs); }
@@ -89,18 +94,7 @@ async function sendAll(list, onStep) {
     if (/reject|denied|cancel/i.test(e?.message || "")) throw e;
     console.warn("batch sign failed, retrying once", e);
     try { signed = await wallet.signAll(txs); }
-    catch (e2) {
-      if (/reject|denied|cancel/i.test(e2?.message || "") || txs.length === 1) throw e2;
-      // Wallet refuses the batch: sign and land one at a time (one prompt each).
-      console.warn("wallet refused batch signing, falling back to one at a time", e2);
-      const sigs = [];
-      for (let i = 0; i < txs.length; i++) {
-        onStep?.(i, txs.length);
-        const [one] = await wallet.signAll([txs[i]]);
-        sigs.push(await land(one, lastValidBlockHeight, i));
-      }
-      return sigs;
-    }
+    catch (e2) { throw new Error(`wallet could not sign (${e2?.name || "error"}: ${e2?.message || e2}). ${txs.length} v0 transaction${txs.length === 1 ? "" : "s"}, ${txs.map((t) => t.serialize().length).join("/")} bytes.`); }
   }
   const sigs = [];
   for (let i = 0; i < signed.length; i++) {
@@ -111,7 +105,7 @@ async function sendAll(list, onStep) {
 }
 async function land(tx, lastValidBlockHeight, step) {
   const raw = tx.serialize();
-  const sig = C.bs58.encode(tx.signature);
+  const sig = C.bs58.encode(tx.signatures[0]);
   let delay = 1200, first = true;
   for (;;) {
     try { await conn.sendRawTransaction(raw, { skipPreflight: !first, preflightCommitment: "confirmed", maxRetries: 0 }); }
