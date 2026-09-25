@@ -91,7 +91,10 @@ async function sendAll(list, onStep) {
     if (/reject|denied|cancel/i.test(e?.message || "")) throw e;
     console.warn("batch sign failed, retrying once", e);
     try { signed = await wallet.signAll(txs); }
-    catch (e2) { throw new Error(`wallet could not sign (${e2?.name || "error"}${e2?.code != null ? " " + e2.code : ""}: ${e2?.message || e2}). ${txs.length} v0 transaction${txs.length === 1 ? "" : "s"}, ${txs.map((t) => t.serialize().length).join("/")} bytes.`); }
+    catch (e2) {
+      const hint = e2?.code === -32603 || /unexpected error/i.test(e2?.message || "") ? " Usually the wallet is locked or its window was closed: unlock it and try again." : "";
+      throw new Error(`wallet could not sign (${e2?.name || "error"}${e2?.code != null ? " " + e2.code : ""}: ${e2?.message || e2}).${hint} ${txs.length} v0 transaction${txs.length === 1 ? "" : "s"}, ${txs.map((t) => t.serialize().length).join("/")} bytes.`);
+    }
   }
   signed = signed.map((t, i) => {
     const tx = VersionedTransaction.deserialize(t.serialize());
