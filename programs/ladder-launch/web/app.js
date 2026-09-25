@@ -78,12 +78,9 @@ async function sendAll(list, onStep) {
   // one is submitted in order and resubmitted with a small backoff until it lands.
   if (!wallet.pubkey) throw new Error("connect a wallet first");
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
-  const txs = list.map(({ ixs, signers = [] }) => {
-    const msg = new TransactionMessage({ payerKey: wallet.pubkey, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message();
-    const tx = new VersionedTransaction(msg);
-    if (signers.length) tx.sign(signers);
-    return tx;
-  });
+  // The wallet signs untouched transactions first; the fresh keypairs (mints, vaults) add
+  // their signatures afterwards. Pre-signed transactions made Phantom fail after approval.
+  const txs = list.map(({ ixs }) => new VersionedTransaction(new TransactionMessage({ payerKey: wallet.pubkey, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message()));
   // Simulate the first one so a program error shows real logs instead of the wallet's
   // generic failure. Later ones depend on it landing, so they can't be simulated yet.
   const sim = await conn.simulateTransaction(txs[0], { sigVerify: false, commitment: "confirmed" });
@@ -94,8 +91,14 @@ async function sendAll(list, onStep) {
     if (/reject|denied|cancel/i.test(e?.message || "")) throw e;
     console.warn("batch sign failed, retrying once", e);
     try { signed = await wallet.signAll(txs); }
-    catch (e2) { throw new Error(`wallet could not sign (${e2?.name || "error"}: ${e2?.message || e2}). ${txs.length} v0 transaction${txs.length === 1 ? "" : "s"}, ${txs.map((t) => t.serialize().length).join("/")} bytes.`); }
+    catch (e2) { throw new Error(`wallet could not sign (${e2?.name || "error"}${e2?.code != null ? " " + e2.code : ""}: ${e2?.message || e2}). ${txs.length} v0 transaction${txs.length === 1 ? "" : "s"}, ${txs.map((t) => t.serialize().length).join("/")} bytes.`); }
   }
+  signed = signed.map((t, i) => {
+    const tx = VersionedTransaction.deserialize(t.serialize());
+    const signers = list[i].signers || [];
+    if (signers.length) tx.sign(signers);
+    return tx;
+  });
   const sigs = [];
   for (let i = 0; i < signed.length; i++) {
     onStep?.(i, signed.length);
