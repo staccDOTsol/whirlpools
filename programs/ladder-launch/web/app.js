@@ -228,6 +228,54 @@ async function renderExplore() {
   document.getElementById("q").oninput = () => renderExplore();
 }
 
+// ---------- in-place rendering ----------
+// Periodic refreshes patch the existing DOM instead of replacing it, so nothing flashes and
+// a focused input is never clobbered. Handlers are re-attached by the caller after each pass.
+function morph(from, to) {
+  if (from.nodeType === Node.TEXT_NODE && to.nodeType === Node.TEXT_NODE) { if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue; return; }
+  if (from.nodeType !== to.nodeType || from.nodeName !== to.nodeName) { from.replaceWith(to); return; }
+  if (from.nodeType !== Node.ELEMENT_NODE) return;
+  for (const a of Array.from(from.attributes)) if (!to.hasAttribute(a.name)) from.removeAttribute(a.name);
+  for (const a of Array.from(to.attributes)) if (from.getAttribute(a.name) !== a.value) from.setAttribute(a.name, a.value);
+  if ((from.tagName === "INPUT" || from.tagName === "TEXTAREA") && document.activeElement === from) return;
+  const fc = Array.from(from.childNodes), tc = Array.from(to.childNodes);
+  for (let i = 0; i < Math.max(fc.length, tc.length); i++) {
+    if (!tc[i]) fc[i].remove();
+    else if (!fc[i]) from.appendChild(tc[i]);
+    else morph(fc[i], tc[i]);
+  }
+}
+function patch(root, html) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  morph(root, tmp);
+}
+
+// ---------- chart ----------
+// Market cap over time from the pool's own Traded events, plus the live point. No embed.
+function priceChart(series, quote, trades) {
+  const W = 800, H = 300, L = 8, R = 8, T = 18, B = 26;
+  const xs = series.map((p) => p[0]), ys = series.map((p) => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), span = Math.max(1, x1 - x0);
+  let y0 = Math.min(...ys), y1 = Math.max(...ys);
+  if (y1 - y0 < y1 * 0.02) { y0 = y0 * 0.98; y1 = y1 * 1.02; }
+  const X = (t) => L + ((t - x0) / span) * (W - L - R), Y = (v) => H - B - ((v - y0) / (y1 - y0 || 1)) * (H - T - B);
+  const pts = series.length === 1 ? [[L, Y(ys[0])], [W - R, Y(ys[0])]] : series.map((p) => [X(p[0]), Y(p[1])]);
+  const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  const area = `${d} L${pts[pts.length - 1][0].toFixed(1)} ${H - B} L${pts[0][0].toFixed(1)} ${H - B}Z`;
+  const up = ys[ys.length - 1] >= ys[0];
+  const col = up ? "var(--accent)" : "var(--exit)";
+  const lab = (v) => fmt(v, v < 10 ? 3 : 1);
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".25"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+      <path d="${area}" fill="url(#g)"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      <circle cx="${pts[pts.length - 1][0].toFixed(1)}" cy="${pts[pts.length - 1][1].toFixed(1)}" r="4" fill="${col}" vector-effect="non-scaling-stroke"/>
+    </svg>
+    <div class="mono muted" style="position:absolute;top:8px;left:12px;font-size:12px">${lab(y1)} ${esc(quote)}</div>
+    <div class="mono muted" style="position:absolute;bottom:8px;left:12px;font-size:12px">${lab(y0)} ${esc(quote)}</div>
+    <div class="mono muted" style="position:absolute;bottom:8px;right:12px;font-size:12px">${trades ? `${trades} trade${trades === 1 ? "" : "s"} · since ${ago(series[0][0])} ago` : "no trades yet · price set by the opening tick"}</div>`;
+}
+
 // ---------- launch page ----------
 let pageTimer = null;
 async function renderLaunch(mintStr) {
@@ -250,26 +298,36 @@ async function renderLaunch(mintStr) {
     const isSol = l.quoteMint.equals(C.WSOL);
     const tiles = isSol ? [0.5, 1, 5] : [10, 50, 250];
     const preview = (amt) => pool ? C.seatPreview(l, pool, amt * 10 ** qdec).tokens / 10 ** r.dec : 0;
-    let tape = [];
-    try { tape = await C.fetchTape(histConn, l, 25); } catch (e) { console.warn("tape unavailable", e); }
-    let mySeats = [];
-    if (wallet.pubkey && pool) {
-      const nfts = await wallet.nftMints();
-      const seats = (await C.fetchSeatsForLaunch(conn, l.pubkey)).filter((s) => nfts.has(s.nftMint.toBase58()));
-      const positions = await C.fetchMany(conn, seats.map((s) => C.bundledPositionPda(s.bundleMint, s.bundleIndex)));
-      mySeats = seats.map((s, i) => {
-        const p = C.decodePosition(positions[i]);
+    let tape = [], history = [];
+    try { [tape, history] = await Promise.all([C.fetchTape(histConn, l, 25), pool ? C.fetchPriceHistory(histConn, l, 100) : []]); } catch (e) { console.warn("history unavailable", e); }
+    const mcapAt = (sqrtPrice) => C.tokenPrice({ sqrtPrice }, l, r.dec) * r.supplyWhole;
+    const series = history.map((h) => [h.time, mcapAt(h.sqrtPrice)]);
+    series.push([now, r.mcap]);
+    let allSeats = [], mySeats = [], poolQuote = 0, poolTokens = 0;
+    if (pool) {
+      const nfts = wallet.pubkey ? await wallet.nftMints() : new Set();
+      const seats = await C.fetchSeatsForLaunch(conn, l.pubkey);
+      const quoteVault = l.tokenIsA ? pool.vaultB : pool.vaultA, tokenVault = l.tokenIsA ? pool.vaultA : pool.vaultB;
+      const infos = await C.fetchMany(conn, [quoteVault, tokenVault, ...seats.map((s) => C.bundledPositionPda(s.bundleMint, s.bundleIndex))]);
+      poolQuote = Number(C.tokenAccountAmount(infos[0])) / 10 ** qdec;
+      poolTokens = Number(C.tokenAccountAmount(infos[1])) / 10 ** r.dec;
+      allSeats = seats.map((s, i) => {
+        const p = C.decodePosition(infos[i + 2]);
         const { a, b } = C.positionAmounts(s.liquidity, s.tickLower, s.tickUpper, pool.sqrtPrice);
         const tokens = l.tokenIsA ? a : b, quoteSide = l.tokenIsA ? b : a;
         const extraTokens = Math.max(0, tokens - Number(s.seededTokens));
         const nowQuote = (quoteSide + extraTokens * r.price * 10 ** (qdec - r.dec)) / 10 ** qdec;
         const inQuote = Number(s.quoteIn) / 10 ** qdec;
         const feesQuote = p ? Number(l.tokenIsA ? p.feeOwedB : p.feeOwedA) / 10 ** qdec : 0;
-        return { s, p, nowQuote, inQuote, pct: inQuote > 0 ? (nowQuote / inQuote - 1) * 100 : 0, feesQuote, age: now - s.entryTs, young: now - s.entryTs < l.minAgeS };
-      }).sort((x, y) => y.s.entryTs - x.s.entryTs);
+        return { s, p, nowQuote, inQuote, pct: inQuote > 0 ? (nowQuote / inQuote - 1) * 100 : 0, feesQuote, age: now - s.entryTs, young: now - s.entryTs < l.minAgeS, mine: nfts.has(s.nftMint.toBase58()), tokens: tokens / 10 ** r.dec };
+      });
+      mySeats = allSeats.filter((m) => m.mine).sort((x, y) => y.s.entryTs - x.s.entryTs);
     }
+    const bySize = allSeats.slice().sort((x, y) => y.inQuote - x.inQuote);
+    const seatedQuote = allSeats.reduce((n, m) => n + m.inQuote, 0), seatedNow = allSeats.reduce((n, m) => n + m.nowQuote, 0);
+    const dispensedPct = r.mint && r.mint.supply > 0n ? Number(l.tokensDispensed) / Number(r.mint.supply) * 100 : 0;
     const f = state.flash;
-    app.innerHTML = `
+    patch(app, `
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
         ${avatar(r)}
         <div style="min-width:0">
@@ -285,11 +343,25 @@ async function renderLaunch(mintStr) {
             <div><div class="muted" style="font-size:12px">market cap</div><div class="big">${pool ? fmt(r.mcap, r.mcap < 10 ? 3 : 1) : "—"} <span class="muted" style="font-size:16px">${esc(quote)}</span></div></div>
             <div style="text-align:right"><div class="muted" style="font-size:12px">price</div><div class="mono" style="font-size:18px">${pool ? r.price.toPrecision(4) : "—"} <span class="muted" style="font-size:12px">${esc(quote)}</span></div></div>
           </div>
-          <div class="chart">${pool ? `<iframe title="chart" src="https://www.geckoterminal.com/solana/pools/${l.whirlpool}?embed=1&info=0&swaps=0&grayscale=0&light_chart=0" allow="clipboard-write" allowfullscreen></iframe>` : `<div class="empty">No pool yet.</div>`}</div>
+          <div class="chart">${pool ? priceChart(series, quote, history.length) : `<div class="empty">No pool yet.</div>`}</div>
           <div class="tape">${tape.length ? tape.map((t) => `<span><b class="${t.kind === "deposit" ? "accent" : t.kind === "exit" ? "exit" : "muted"}">${t.kind === "deposit" ? "+" : t.kind === "exit" ? "out " : "fees "}${fmt(t.amount / 10 ** qdec, 3)}</b><span class="muted">${short(t.who)} · ${ago(t.time)}</span></span>`).join("") : `<span class="muted">No seats yet. First one sets the tape.</span>`}</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="panel"><div class="muted" style="font-size:12px">reserve left</div><div class="mono" style="font-size:18px;margin:4px 0">${(r.reserveLeft * 100).toFixed(1)}%</div><div class="bar"><i style="width:${(r.reserveLeft * 100).toFixed(1)}%"></i></div></div>
-            <div class="panel"><div class="muted" style="font-size:12px">exit room this minute</div><div class="mono" style="font-size:18px;margin:4px 0">${(room * 100).toFixed(0)}%${inWindow ? ` <span class="muted" style="font-size:12px">reset in ${Math.max(0, 60 - (now - Number(l.windowStart))) | 0}s</span>` : ""}</div><div class="bar"><i style="width:${(room * 100).toFixed(0)}%;background:var(--exit)"></i></div></div>
+          <div class="stats">
+            <div class="panel"><div class="muted" style="font-size:12px">seats open</div><div class="mono" style="font-size:20px">${l.seatsOpen}</div><div class="muted" style="font-size:12px">${l.nextIndex} taken all time</div></div>
+            <div class="panel"><div class="muted" style="font-size:12px">seated ${esc(quote)}</div><div class="mono" style="font-size:20px">${fmt(seatedQuote, 2)}</div><div class="muted" style="font-size:12px">worth ${fmt(seatedNow, 2)} now · ${fmt(r.quoteIn, 2)} in all time</div></div>
+            <div class="panel"><div class="muted" style="font-size:12px">in the pool</div><div class="mono" style="font-size:20px">${fmt(poolQuote, 2)} <span class="muted" style="font-size:12px">${esc(quote)}</span></div><div class="muted" style="font-size:12px">${fmtTok(poolTokens)} ${esc(r.meta.symbol)} on the ask</div></div>
+            <div class="panel"><div class="muted" style="font-size:12px">reserve left</div><div class="mono" style="font-size:20px">${(r.reserveLeft * 100).toFixed(1)}%</div><div class="bar" style="margin-top:6px"><i style="width:${(r.reserveLeft * 100).toFixed(1)}%"></i></div><div class="muted" style="font-size:12px;margin-top:4px">${dispensedPct.toFixed(1)}% dispensed · floor ${(l.floorBps / 100).toFixed(1)}%${l.flags & C.FLAG.FLOOR ? " locked" : " not seeded"}</div></div>
+            <div class="panel"><div class="muted" style="font-size:12px">exit room this minute</div><div class="mono" style="font-size:20px">${(room * 100).toFixed(0)}%</div><div class="bar" style="margin-top:6px"><i style="width:${(room * 100).toFixed(0)}%;background:var(--exit)"></i></div><div class="muted" style="font-size:12px;margin-top:4px">${inWindow ? `reset in ${Math.max(0, 60 - (now - Number(l.windowStart))) | 0}s` : `${l.exitCapBps / 100}% of the book per minute`}</div></div>
+          </div>
+          <div class="panel">
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="display" style="font-size:16px">All seats</span><span class="muted" style="font-size:12px">${allSeats.length} open · by size</span></div>
+            ${bySize.length ? `<div class="seatlist">${bySize.slice(0, 30).map((m) => `
+              <div class="seatrow ${m.mine ? "mine" : ""}">
+                <span class="mono muted">#${m.s.bundleIndex}${m.mine ? " · you" : ""}</span>
+                <span class="mono">${fmt(m.inQuote, 2)} → ${fmt(m.nowQuote, 2)}</span>
+                <span class="mono ${m.pct >= 0 ? "accent" : "exit"}">${m.pct >= 0 ? "+" : ""}${m.pct.toFixed(0)}%</span>
+                <span class="mono muted">${fmtTok(m.tokens)} ${esc(r.meta.symbol)}</span>
+                <span class="mono muted">${ago(m.s.entryTs)}</span>
+              </div>`).join("")}${bySize.length > 30 ? `<div class="muted" style="font-size:12px;padding-top:6px">and ${bySize.length - 30} more</div>` : ""}</div>` : `<div class="muted" style="font-size:13px;margin-top:8px">No open seats.</div>`}
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:14px">
@@ -321,7 +393,7 @@ async function renderLaunch(mintStr) {
             </div>
           </div>
         </div>
-      </div>`;
+      </div>`);
     const seatsById = new Map(mySeats.map((m) => [m.s.pubkey.toBase58(), m.s]));
     const run = async (label, fn) => { state.busy = label; state.armed = null; await draw(); try { await fn(); } catch (e) { showError(e); } state.busy = false; launchCache.at = 0; wallet.nfts = null; await draw(); };
     app.querySelectorAll("[data-amt]").forEach((b) => (b.onclick = () => seat(+b.dataset.amt)));
@@ -331,7 +403,7 @@ async function renderLaunch(mintStr) {
     app.querySelectorAll("[data-collect]").forEach((b) => (b.onclick = () => run("Collecting fees…", () => collect(l, pool, seatsById.get(b.dataset.collect)))));
   };
   await draw();
-  pageTimer = setInterval(() => { if (!state.busy && !state.armed && location.hash.startsWith(`#/launch/${mintStr}`)) draw(); }, 10_000);
+  pageTimer = setInterval(() => { if (!state.busy && !state.armed && !document.hidden && location.hash.startsWith(`#/launch/${mintStr}`)) draw(); }, 10_000);
 }
 async function deposit(l, pool, amt) {
   const user = wallet.pubkey, nft = Keypair.generate();

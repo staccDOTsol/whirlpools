@@ -288,3 +288,26 @@ function quoteDelta(meta, keys, owner, mint) {
   const pre = find(meta.preTokenBalances || []), post = find(meta.postTokenBalances || []);
   return Number((post?.uiTokenAmount.amount ?? 0)) - Number((pre?.uiTokenAmount.amount ?? 0));
 }
+
+/// Whirlpool `Traded` events for the launch pool, parsed from its transaction history:
+/// [{ time, sqrtPrice, aToB, amountIn, amountOut }] oldest first. Deposits don't trade, so
+/// a launch with no swaps yet has an empty history.
+const TRADED_DISC = [225, 202, 73, 175, 147, 43, 160, 150]; // sha256("event:Traded")[..8]
+export async function fetchPriceHistory(conn, launch, limit = 100) {
+  const sigs = await rpc(conn, "getSignaturesForAddress", [launch.whirlpool.toBase58(), { limit, commitment: "confirmed" }]);
+  const ok = sigs.filter((s) => !s.err);
+  if (!ok.length) return [];
+  const txs = (await conn._rpcBatchRequest(ok.map((s) => ({ methodName: "getTransaction", args: [s.signature, { encoding: "json", commitment: "confirmed", maxSupportedTransactionVersion: 0 }] })))).map((r) => r.result);
+  const out = [];
+  txs.forEach((tx, i) => {
+    if (!tx || tx.meta?.err) return;
+    for (const l of tx.meta.logMessages || []) {
+      if (!l.startsWith("Program data: ")) continue;
+      const b = b64(l.slice(14));
+      if (b.length < 121 || TRADED_DISC.some((x, k) => b[k] !== x)) continue;
+      if (!new PublicKey(b.subarray(8, 40)).equals(launch.whirlpool)) continue;
+      out.push({ time: ok[i].blockTime, sig: ok[i].signature, aToB: b[40] === 1, sqrtPrice: u128(b, 57), amountIn: Number(u64(b, 73)), amountOut: Number(u64(b, 81)) });
+    }
+  });
+  return out.sort((a, b) => a.time - b.time);
+}

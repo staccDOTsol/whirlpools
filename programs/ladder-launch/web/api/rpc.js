@@ -2,6 +2,10 @@
 // the upstream RPC directly, so the key stays server side and repeated reads are absorbed.
 // Set RPC_URL in the project's environment; the public mainnet endpoint is the fallback.
 const UPSTREAM = process.env.RPC_URL || "https://api.mainnet-beta.solana.com";
+// Signature history and transactions come from a separate upstream: FluxRPC's address index
+// lags (0 signatures where the public RPC has 6), and these calls are cached hard anyway.
+const HISTORY = process.env.HISTORY_RPC_URL || "https://api.mainnet-beta.solana.com";
+const HISTORY_METHODS = new Set(["getSignaturesForAddress", "getTransaction"]);
 // Method allowlist with cache TTL in ms (0 = never cached).
 const TTL = {
   getProgramAccounts: 4000, getAccountInfo: 2000, getMultipleAccounts: 2000, getTokenAccountsByOwner: 3000,
@@ -48,7 +52,7 @@ export default async function handler(req, res) {
     await Promise.all(forward.map(async (f) => {
       let r;
       try {
-        const up = await fetch(UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(f.call) });
+        const up = await fetch(HISTORY_METHODS.has(f.call.method) ? HISTORY : UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(f.call) });
         const text = await up.text();
         try { r = JSON.parse(text); } catch { r = { jsonrpc: "2.0", id: f.call.id, error: { code: -32000, message: `upstream ${up.status}: ${text.slice(0, 300)}` } }; }
         if (Array.isArray(r)) r = r[0];
