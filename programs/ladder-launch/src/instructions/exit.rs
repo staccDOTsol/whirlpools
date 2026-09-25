@@ -22,7 +22,7 @@
 //! 17 token_mint
 //! 18 quote_mint
 //! 19 token_program                 SPL Token
-//! 20 quote_token_program
+//! 20 token_2022_program            Token-2022 (launch token, and the quote when it is Token-2022)
 //! 21 memo_program
 //! 22 whirlpool_program
 use super::*;

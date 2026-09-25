@@ -1,6 +1,6 @@
 // Ladder Launch front end. Every figure on screen is read from mainnet through /api/rpc.
 import { Connection, PublicKey, TransactionMessage, VersionedTransaction, Keypair, SystemProgram, ComputeBudgetProgram } from "@solana/web3.js";
-import * as C from "./chain.js?v=1790357273";
+import * as C from "./chain.js?v=1790357373";
 
 // Live state and sends go straight to the RPC (RPC_URL, served by /api/config so the key is
 // not in the repo). History (signatures, transactions) goes through /api/rpc, which caches.

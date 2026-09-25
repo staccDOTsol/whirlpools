@@ -203,7 +203,7 @@ function seatRefs(user, launch, pool, seat) {
 export function exitIx({ user, launch, pool, seat }) {
   const s = seatRefs(user, launch, pool, seat);
   return ix([ws(user), w(launch.pubkey), w(seat.pubkey), w(seat.nftMint), w(s.nftAta), w(launch.whirlpool), w(s.bundle), r(s.bundleAta), w(s.bundled), w(launch.reserveVault), w(launch.quoteVault),
-    w(s.userToken), w(s.userQuote), w(s.va), w(s.vb), w(s.taLower), w(s.taUpper), r(launch.tokenMint), r(launch.quoteMint), r(TOKEN), r(launch.quoteTokenProgram), r(MEMO), r(WHIRLPOOL)], new Uint8Array([5]));
+    w(s.userToken), w(s.userQuote), w(s.va), w(s.vb), w(s.taLower), w(s.taUpper), r(launch.tokenMint), r(launch.quoteMint), r(TOKEN), r(TOKEN_2022), r(MEMO), r(WHIRLPOOL)], new Uint8Array([5]));
 }
 export function collectFeesIx({ user, launch, pool, seat }) {
   const s = seatRefs(user, launch, pool, seat);
