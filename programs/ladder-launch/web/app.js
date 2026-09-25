@@ -1,6 +1,6 @@
 // Ladder Launch front end. Every figure on screen is read from mainnet through /api/rpc.
 import { Connection, PublicKey, TransactionMessage, VersionedTransaction, Keypair, SystemProgram, ComputeBudgetProgram } from "@solana/web3.js";
-import * as C from "./chain.js?v=1790357494";
+import * as C from "./chain.js?v=1790357702";
 
 // Live state and sends go straight to the RPC (RPC_URL, served by /api/config so the key is
 // not in the repo). History (signatures, transactions) goes through /api/rpc, which caches.
@@ -42,7 +42,13 @@ const wallet = {
     if (this.provider.signAllTransactions) return this.provider.signAllTransactions(txs);
     const out = []; for (const t of txs) out.push(await this.provider.signTransaction(t)); return out;
   },
-  async nftMints() { if (!this.pubkey) return new Set(); if (!this.nfts) this.nfts = await C.fetchNftMints(conn, this.pubkey); return this.nfts; },
+  // Seat NFTs held by the wallet, read through the proxy (Triton). Cached briefly so a redraw
+  // right after an action still sees the new seat without hammering the RPC.
+  async nftMints() {
+    if (!this.pubkey) return new Set();
+    if (!this.nfts || Date.now() - this.nftsAt > 4000) { this.nfts = await C.fetchNftMints(histConn, this.pubkey); this.nftsAt = Date.now(); }
+    return this.nfts;
+  },
 };
 function renderWalletButton() {
   const b = document.getElementById("wallet-btn");
@@ -178,7 +184,7 @@ async function loadLaunch(mintStr, fresh) {
   return row;
 }
 async function allSeats() {
-  const res = await C.rpc(conn, "getProgramAccounts", [C.PROGRAM.toBase58(), { encoding: "base64", commitment: "confirmed", filters: [{ dataSize: C.SEAT_LEN }, { memcmp: { offset: 0, bytes: "3" } }] }]);
+  const res = await C.rpc(histConn, "getProgramAccounts", [C.PROGRAM.toBase58(), { encoding: "base64", commitment: "confirmed", filters: [{ dataSize: C.SEAT_LEN }, { memcmp: { offset: 0, bytes: "3" } }] }]);
   return res.map((a) => C.decodeSeat(new PublicKey(a.pubkey), Uint8Array.from(atob(a.account.data[0]), (c) => c.charCodeAt(0)))).filter(Boolean);
 }
 const avatar = (r) => r.meta.image ? `<img class="avatar" data-img="${r.l.tokenMint}" src="${esc(r.meta.image)}" alt="">` : `<div class="avatar" data-img="${r.l.tokenMint}">${esc((r.meta.symbol || "?").slice(0, 3))}</div>`;

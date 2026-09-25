@@ -5,7 +5,9 @@ const UPSTREAM = process.env.RPC_URL || "https://api.mainnet-beta.solana.com";
 // Signature history and transactions come from a separate upstream: FluxRPC's address index
 // lags (0 signatures where the public RPC has 6), and these calls are cached hard anyway.
 const HISTORY = process.env.HISTORY_RPC_URL || "https://api.mainnet-beta.solana.com";
-const HISTORY_METHODS = new Set(["getSignaturesForAddress", "getTransaction"]);
+// getTokenAccountsByOwner and getProgramAccounts also go there: the live endpoint returns
+// malformed JSON for large token-account lists and takes 4 s per getProgramAccounts.
+const HISTORY_METHODS = new Set(["getSignaturesForAddress", "getTransaction", "getTokenAccountsByOwner", "getProgramAccounts"]);
 // Method allowlist with cache TTL in ms (0 = never cached).
 const TTL = {
   getProgramAccounts: 4000, getAccountInfo: 2000, getMultipleAccounts: 2000, getTokenAccountsByOwner: 3000,
