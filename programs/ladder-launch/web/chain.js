@@ -1,8 +1,8 @@
 // On-chain reads and instruction builders for ladder-launch. No mock data anywhere:
 // every number on the page comes from an account or a transaction on mainnet.
-import { PublicKey, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY } from "https://esm.sh/@solana/web3.js@1.98.4?bundle";
-import bs58 from "https://esm.sh/bs58@6.0.0";
-import { Buffer } from "https://esm.sh/buffer@6.0.3";
+import { PublicKey, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
+import bs58 from "bs58";
+import { Buffer } from "buffer";
 export { bs58 };
 // web3.js bundles its own Buffer; instruction data and key compares here need the global.
 if (!globalThis.Buffer) globalThis.Buffer = Buffer;
@@ -311,3 +311,31 @@ export async function fetchPriceHistory(conn, launch, limit = 100) {
   });
   return out.sort((a, b) => a.time - b.time);
 }
+
+// ---------- JSON transport (server endpoints -> browser) ----------
+export function ser(v) {
+  if (v == null) return v;
+  if (typeof v === "bigint") return v.toString();
+  if (v instanceof PublicKey) return v.toBase58();
+  if (v instanceof Uint8Array) return Array.from(v);
+  if (Array.isArray(v)) return v.map(ser);
+  if (typeof v === "object") { const o = {}; for (const k of Object.keys(v)) o[k] = ser(v[k]); if ("tokenIsA" in v) o.tokenIsA = v.tokenIsA; if ("ready" in v) o.ready = v.ready; return o; }
+  return v;
+}
+const PK = (x) => (x == null ? x : new PublicKey(x));
+const BI = (x) => (x == null ? x : BigInt(x));
+export function hydrateLaunch(j) {
+  if (!j) return null;
+  const l = { ...j };
+  for (const k of ["pubkey", "tokenMint", "quoteMint", "whirlpool", "reserveVault", "quoteVault", "creator", "treasury", "floorPosition", "bundleMint", "quoteTokenProgram"]) l[k] = PK(j[k]);
+  for (const k of ["windowStart", "windowLiquidity", "totalLiquidity", "tokensDispensed", "quoteIn"]) l[k] = BI(j[k]);
+  return l;
+}
+export function hydratePool(j) {
+  if (!j) return null;
+  return { ...j, liquidity: BI(j.liquidity), sqrtPrice: BI(j.sqrtPrice), mintA: PK(j.mintA), vaultA: PK(j.vaultA), mintB: PK(j.mintB), vaultB: PK(j.vaultB) };
+}
+export function hydrateSeat(j) {
+  return { ...j, pubkey: PK(j.pubkey), launch: PK(j.launch), bundleMint: PK(j.bundleMint), nftMint: PK(j.nftMint), seededTokens: BI(j.seededTokens), quoteIn: BI(j.quoteIn), liquidity: BI(j.liquidity) };
+}
+export function hydrateMint(j) { return j ? { ...j, supply: BI(j.supply) } : null; }

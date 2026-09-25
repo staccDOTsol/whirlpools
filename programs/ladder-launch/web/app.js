@@ -1,11 +1,12 @@
 // Ladder Launch front end. Every figure on screen is read from mainnet through /api/rpc.
-import { Connection, PublicKey, TransactionMessage, VersionedTransaction, Keypair, SystemProgram, ComputeBudgetProgram } from "https://esm.sh/@solana/web3.js@1.98.4?bundle";
+import { Connection, PublicKey, TransactionMessage, VersionedTransaction, Keypair, SystemProgram, ComputeBudgetProgram } from "@solana/web3.js";
 import * as C from "./chain.js";
 
 // Live state and sends go straight to the RPC (RPC_URL, served by /api/config so the key is
 // not in the repo). History (signatures, transactions) goes through /api/rpc, which caches.
-const LIVE_RPC = await fetch("/api/config").then((r) => r.json()).then((j) => j.rpc).catch(() => null) || location.origin + "/api/rpc";
-const conn = new Connection(LIVE_RPC, { commitment: "confirmed", disableRetryOnRateLimit: true });
+const CFG = await fetch("/api/config").then((r) => r.json()).catch(() => ({}));
+const LIVE_RPC = CFG.rpc || location.origin + "/api/rpc";
+const conn = new Connection(LIVE_RPC, { commitment: "confirmed", disableRetryOnRateLimit: true, wsEndpoint: CFG.ws || undefined });
 const histConn = new Connection(location.origin + "/api/rpc", { commitment: "confirmed", disableRetryOnRateLimit: true });
 const app = document.getElementById("app");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -143,37 +144,31 @@ async function land(tx, lastValidBlockHeight, step) {
 }
 
 // ---------- data ----------
-const meta = new Map(); // token mint -> { name, symbol, uri, image }
-async function tokenMeta(l, mintData) {
-  const k = l.tokenMint.toBase58();
-  if (meta.has(k)) return meta.get(k);
-  const m = mintData?.metadata ?? null;
-  const entry = { name: m?.name || short(l.tokenMint), symbol: m?.symbol || "", uri: m?.uri || "", image: null };
-  meta.set(k, entry);
-  if (entry.uri) fetch(entry.uri).then((r) => r.json()).then((j) => { entry.image = j.image || null; entry.description = j.description || ""; document.querySelectorAll(`[data-img="${k}"]`).forEach((el) => { if (entry.image) el.outerHTML = `<img class="avatar" data-img="${k}" src="${esc(entry.image)}" alt="">`; }); }).catch(() => {});
-  return entry;
-}
-async function enrich(launches) {
-  const keys = launches.flatMap((l) => [l.whirlpool, l.tokenMint, l.reserveVault]);
-  const infos = await C.fetchMany(conn, keys);
-  return Promise.all(launches.map(async (l, i) => {
-    const pool = l.flags & C.FLAG.POOL ? C.decodePool(infos[3 * i]) : null;
-    const mint = C.decodeMint(infos[3 * i + 1]);
-    const reserve = C.tokenAccountAmount(infos[3 * i + 2]);
-    const dec = mint?.decimals ?? 6, supplyWhole = mint ? Number(mint.supply) / 10 ** dec : 0;
-    const price = pool && mint ? C.tokenPrice(pool, l, dec) : 0;
-    const m = await tokenMeta(l, mint);
-    return { l, pool, mint, dec, supplyWhole, price, mcap: price * supplyWhole, reserveLeft: mint && mint.supply > 0n ? Number(reserve) / Number(mint.supply) : 0, meta: m, quote: quoteName(l.quoteMint), quoteIn: Number(l.quoteIn) / 10 ** l.quoteDecimals };
-  }));
-}
+// Pages read /api/launches and /api/launch, which the server assembles from chain and the
+// CDN caches for a few seconds, so loads are near-instant. `fresh` bypasses the cache after
+// the user's own action so their seat shows up immediately.
+const hydrateRow = (j) => ({ ...j, l: C.hydrateLaunch(j.launch), pool: C.hydratePool(j.pool), mint: C.hydrateMint(j.mint) });
 let launchCache = { at: 0, rows: [] };
-async function loadLaunches(force) {
-  if (!force && Date.now() - launchCache.at < 5000) return launchCache.rows;
-  const rows = await enrich(await C.fetchLaunches(conn));
+async function loadLaunches(fresh) {
+  if (!fresh && Date.now() - launchCache.at < 5000) return launchCache.rows;
+  const r = await fetch(`/api/launches${fresh ? `?_=${Date.now()}` : ""}`);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || "could not load launches");
+  const rows = j.rows.map(hydrateRow);
   launchCache = { at: Date.now(), rows };
-  const seats = rows.reduce((n, r) => n + r.l.seatsOpen, 0);
+  const seats = rows.reduce((n, x) => n + x.l.seatsOpen, 0);
   document.getElementById("live").innerHTML = `<i></i>LIVE<b> · ${seats} seats open · ${rows.length} launch${rows.length === 1 ? "" : "es"}</b>`;
   return rows;
+}
+async function loadLaunch(mintStr, fresh) {
+  const r = await fetch(`/api/launch?mint=${encodeURIComponent(mintStr)}${fresh ? `&_=${Date.now()}` : ""}`);
+  if (r.status === 404) return null;
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || "could not load launch");
+  const row = hydrateRow(j);
+  row.seats = j.seats.map((x) => ({ ...C.hydrateSeat(x), position: x.position ? { ...x.position, feeOwedA: BigInt(x.position.feeOwedA), feeOwedB: BigInt(x.position.feeOwedB) } : null }));
+  row.history = j.history.map((h) => ({ ...h, sqrtPrice: BigInt(h.sqrtPrice) }));
+  return row;
 }
 async function allSeats() {
   const res = await C.rpc(conn, "getProgramAccounts", [C.PROGRAM.toBase58(), { encoding: "base64", commitment: "confirmed", filters: [{ dataSize: C.SEAT_LEN }, { memcmp: { offset: 0, bytes: "3" } }] }]);
@@ -277,18 +272,33 @@ function priceChart(series, quote, trades) {
 }
 
 // ---------- launch page ----------
-let pageTimer = null;
+let pageTimer = null, subs = [];
+function unsubscribeAll() { for (const id of subs) conn.removeAccountChangeListener(id).catch(() => {}); subs = []; }
 async function renderLaunch(mintStr) {
-  clearInterval(pageTimer);
+  clearInterval(pageTimer); unsubscribeAll();
   let tokenMint;
   try { tokenMint = new PublicKey(mintStr); } catch { app.innerHTML = `<div class="empty">Bad mint address.</div>`; return; }
   app.innerHTML = `<div class="empty">Reading launch from chain…</div>`;
-  const state = { armed: null, flash: null, busy: false };
+  // livePool / livePoints come from the websocket and override the cached snapshot until it catches up.
+  const state = { armed: null, flash: null, busy: false, livePool: null, livePoints: [], fresh: false };
+  let drawing = false, again = false;
   const draw = async () => {
-    let l;
-    try { l = await C.fetchLaunch(conn, tokenMint); } catch (e) { return showError(e); }
-    if (!l) { app.innerHTML = `<div class="empty">No launch for this mint.</div>`; return; }
-    const [r] = await enrich([l]);
+    if (drawing) { again = true; return; }
+    drawing = true;
+    try { await drawOnce(); } finally { drawing = false; if (again) { again = false; draw(); } }
+  };
+  const drawOnce = async () => {
+    let r;
+    try { r = await loadLaunch(mintStr, state.fresh); } catch (e) { return showError(e); }
+    state.fresh = false;
+    if (!r) { app.innerHTML = `<div class="empty">No launch for this mint.</div>`; return; }
+    const l = r.l;
+    if (state.livePool) {
+      // The socket saw a newer pool state than the cached snapshot: use it for price and cap.
+      r.pool = state.livePool;
+      r.price = C.tokenPrice(r.pool, l, r.dec);
+      r.mcap = r.price * r.supplyWhole;
+    }
     const pool = r.pool;
     const now = Date.now() / 1000;
     const inWindow = now - Number(l.windowStart) < 60;
@@ -298,21 +308,18 @@ async function renderLaunch(mintStr) {
     const isSol = l.quoteMint.equals(C.WSOL);
     const tiles = isSol ? [0.5, 1, 5] : [10, 50, 250];
     const preview = (amt) => pool ? C.seatPreview(l, pool, amt * 10 ** qdec).tokens / 10 ** r.dec : 0;
-    let tape = [], history = [];
-    try { [tape, history] = await Promise.all([C.fetchTape(histConn, l, 25), pool ? C.fetchPriceHistory(histConn, l, 100) : []]); } catch (e) { console.warn("history unavailable", e); }
+    const tape = r.tape, history = r.history;
     const mcapAt = (sqrtPrice) => C.tokenPrice({ sqrtPrice }, l, r.dec) * r.supplyWhole;
     const series = history.map((h) => [h.time, mcapAt(h.sqrtPrice)]);
+    const lastHist = series.length ? series[series.length - 1][0] : 0;
+    for (const [t, sp] of state.livePoints) if (t > lastHist) series.push([t, mcapAt(sp)]);
     series.push([now, r.mcap]);
-    let allSeats = [], mySeats = [], poolQuote = 0, poolTokens = 0;
+    let allSeats = [], mySeats = [];
+    const poolQuote = r.poolQuote, poolTokens = r.poolTokens;
     if (pool) {
       const nfts = wallet.pubkey ? await wallet.nftMints() : new Set();
-      const seats = await C.fetchSeatsForLaunch(conn, l.pubkey);
-      const quoteVault = l.tokenIsA ? pool.vaultB : pool.vaultA, tokenVault = l.tokenIsA ? pool.vaultA : pool.vaultB;
-      const infos = await C.fetchMany(conn, [quoteVault, tokenVault, ...seats.map((s) => C.bundledPositionPda(s.bundleMint, s.bundleIndex))]);
-      poolQuote = Number(C.tokenAccountAmount(infos[0])) / 10 ** qdec;
-      poolTokens = Number(C.tokenAccountAmount(infos[1])) / 10 ** r.dec;
-      allSeats = seats.map((s, i) => {
-        const p = C.decodePosition(infos[i + 2]);
+      allSeats = r.seats.map((s) => {
+        const p = s.position;
         const { a, b } = C.positionAmounts(s.liquidity, s.tickLower, s.tickUpper, pool.sqrtPrice);
         const tokens = l.tokenIsA ? a : b, quoteSide = l.tokenIsA ? b : a;
         const extraTokens = Math.max(0, tokens - Number(s.seededTokens));
@@ -395,7 +402,7 @@ async function renderLaunch(mintStr) {
         </div>
       </div>`);
     const seatsById = new Map(mySeats.map((m) => [m.s.pubkey.toBase58(), m.s]));
-    const run = async (label, fn) => { state.busy = label; state.armed = null; await draw(); try { await fn(); } catch (e) { showError(e); } state.busy = false; launchCache.at = 0; wallet.nfts = null; await draw(); };
+    const run = async (label, fn) => { state.busy = label; state.armed = null; await draw(); try { await fn(); } catch (e) { showError(e); } state.busy = false; state.fresh = true; launchCache.at = 0; wallet.nfts = null; await draw(); };
     app.querySelectorAll("[data-amt]").forEach((b) => (b.onclick = () => seat(+b.dataset.amt)));
     document.getElementById("custom-go").onclick = () => { const v = parseFloat(document.getElementById("custom").value); if (v > 0) seat(v); };
     const seat = (amt) => { if (!wallet.pubkey) return connectFlow(); run(`Seating ${amt} ${quote}…`, async () => { const res = await deposit(l, pool, amt); state.flash = { ...res, amount: amt }; }); };
@@ -403,7 +410,24 @@ async function renderLaunch(mintStr) {
     app.querySelectorAll("[data-collect]").forEach((b) => (b.onclick = () => run("Collecting fees…", () => collect(l, pool, seatsById.get(b.dataset.collect)))));
   };
   await draw();
-  pageTimer = setInterval(() => { if (!state.busy && !state.armed && !document.hidden && location.hash.startsWith(`#/launch/${mintStr}`)) draw(); }, 10_000);
+  // Realtime: pool account changes (swaps, liquidity) and launch account changes (seats,
+  // exits) push a redraw; the interval is only a fallback if the socket is unavailable.
+  try {
+    const l0 = await loadLaunch(mintStr, false);
+    if (l0?.l) {
+      let lastSqrt = l0.pool?.sqrtPrice ?? null;
+      subs.push(conn.onAccountChange(l0.l.whirlpool, (acc) => {
+        const p = C.decodePool(new Uint8Array(acc.data));
+        if (!p) return;
+        state.livePool = p;
+        if (lastSqrt == null || p.sqrtPrice !== lastSqrt) { state.livePoints.push([Date.now() / 1000, p.sqrtPrice]); lastSqrt = p.sqrtPrice; }
+        state.fresh = true;
+        if (!state.busy && !state.armed) draw();
+      }, "confirmed"));
+      subs.push(conn.onAccountChange(l0.l.pubkey, () => { state.fresh = true; if (!state.busy && !state.armed) draw(); }, "confirmed"));
+    }
+  } catch (e) { console.warn("live subscription unavailable, polling instead", e); }
+  pageTimer = setInterval(() => { if (!state.busy && !state.armed && !document.hidden && location.hash.startsWith(`#/launch/${mintStr}`)) draw(); }, subs.length ? 30_000 : 10_000);
 }
 async function deposit(l, pool, amt) {
   const user = wallet.pubkey, nft = Keypair.generate();
@@ -455,7 +479,6 @@ async function uploadImage(name, file) {
   }
 }
 function renderCreate() {
-  clearInterval(pageTimer);
   app.innerHTML = `
     <div class="display" style="font-size:28px">Launch a token</div>
     <div class="muted" style="margin-bottom:16px">Token-2022 mint with the metadata inside it, fixed supply, mint and freeze authority gone. Four transactions, one signature prompt.</div>
@@ -551,8 +574,8 @@ function route() {
   const h = location.hash || "#/";
   const m = h.match(/^#\/launch\/([1-9A-HJ-NP-Za-km-z]+)/);
   if (m) return renderLaunch(m[1]);
-  if (h.startsWith("#/create")) return renderCreate();
-  clearInterval(pageTimer);
+  if (h.startsWith("#/create")) { clearInterval(pageTimer); unsubscribeAll(); return renderCreate(); }
+  clearInterval(pageTimer); unsubscribeAll();
   return renderExplore();
 }
 window.addEventListener("hashchange", route);

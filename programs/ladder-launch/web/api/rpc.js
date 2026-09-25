@@ -47,23 +47,42 @@ export default async function handler(req, res) {
     forward.push({ i, key, call: c });
   });
   if (forward.length) {
-    // Forward each call as a single JSON-RPC object: the public mainnet endpoint rejects
-    // batched sendTransaction ("cannot unmarshal array"), so batching upstream is not safe.
-    await Promise.all(forward.map(async (f) => {
-      let r;
-      try {
-        const up = await fetch(HISTORY_METHODS.has(f.call.method) ? HISTORY : UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(f.call) });
+    const errFor = (f, message) => ({ jsonrpc: "2.0", id: f.call.id, error: { code: -32000, message } });
+    const settle = (f, r) => { r.id = f.call.id; results[f.i] = r; if (!r.error) store(f.key, TTL[f.call.method], r); };
+    const post = async (url, body) => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const up = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
         const text = await up.text();
-        try { r = JSON.parse(text); } catch { r = { jsonrpc: "2.0", id: f.call.id, error: { code: -32000, message: `upstream ${up.status}: ${text.slice(0, 300)}` } }; }
-        if (Array.isArray(r)) r = r[0];
-        if (!r || typeof r !== "object") r = { jsonrpc: "2.0", id: f.call.id, error: { code: -32000, message: `upstream ${up.status}: ${text.slice(0, 300)}` } };
-      } catch (e) {
-        r = { jsonrpc: "2.0", id: f.call.id, error: { code: -32000, message: `upstream unreachable: ${e.message}` } };
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
+        const limited = up.status === 429 || /rate limit/i.test(text);
+        if (limited && attempt < 2) { await new Promise((r) => setTimeout(r, 400 * (attempt + 1))); continue; }
+        return { status: up.status, text, parsed };
       }
-      r.id = f.call.id;
-      results[f.i] = r;
-      if (!r.error) store(f.key, TTL[f.call.method], r);
-    }));
+    };
+    // History (signatures, transactions) goes to HISTORY as ONE batch: that upstream indexes
+    // history properly and counts connections, so one request beats many parallel ones.
+    const hist = forward.filter((f) => HISTORY_METHODS.has(f.call.method));
+    const live = forward.filter((f) => !HISTORY_METHODS.has(f.call.method));
+    const jobs = [];
+    if (hist.length) jobs.push((async () => {
+      try {
+        const { status, text, parsed } = await post(HISTORY, hist.map((f) => f.call));
+        const arr = Array.isArray(parsed) ? parsed : parsed && typeof parsed === "object" ? [parsed] : [];
+        const byId = new Map(arr.map((r) => [String(r.id), r]));
+        hist.forEach((f, i) => settle(f, byId.get(String(f.call.id)) ?? (arr.length === hist.length ? arr[i] : null) ?? errFor(f, `upstream ${status}: ${text.slice(0, 200)}`)));
+      } catch (e) { hist.forEach((f) => settle(f, errFor(f, `history upstream unreachable: ${e.message}`))); }
+    })());
+    // Live calls go to UPSTREAM one at a time: the public endpoint rejects batched sendTransaction.
+    for (const f of live) jobs.push((async () => {
+      try {
+        const { status, text, parsed } = await post(UPSTREAM, f.call);
+        let r = Array.isArray(parsed) ? parsed[0] : parsed;
+        if (!r || typeof r !== "object") r = errFor(f, `upstream ${status}: ${text.slice(0, 200)}`);
+        settle(f, r);
+      } catch (e) { settle(f, errFor(f, `upstream unreachable: ${e.message}`)); }
+    })());
+    await Promise.all(jobs);
   }
   res.setHeader("content-type", "application/json");
   res.status(200).send(JSON.stringify(batch ? results : results[0]));
