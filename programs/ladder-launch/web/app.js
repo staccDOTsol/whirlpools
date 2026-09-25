@@ -1,6 +1,6 @@
 // Ladder Launch front end. Every figure on screen is read from mainnet through /api/rpc.
 import { Connection, PublicKey, TransactionMessage, VersionedTransaction, Keypair, SystemProgram, ComputeBudgetProgram } from "@solana/web3.js";
-import * as C from "./chain.js";
+import * as C from "./chain.js?v=1790356955";
 
 // Live state and sends go straight to the RPC (RPC_URL, served by /api/config so the key is
 // not in the repo). History (signatures, transactions) goes through /api/rpc, which caches.
@@ -254,7 +254,12 @@ function morph(from, to) {
 function patch(root, html) {
   const tmp = document.createElement("div");
   tmp.innerHTML = html;
-  morph(root, tmp);
+  const fc = Array.from(root.childNodes), tc = Array.from(tmp.childNodes);
+  for (let i = 0; i < Math.max(fc.length, tc.length); i++) {
+    if (!tc[i]) fc[i].remove();
+    else if (!fc[i]) root.appendChild(tc[i]);
+    else morph(fc[i], tc[i]);
+  }
 }
 
 // ---------- chart ----------
@@ -601,6 +606,7 @@ function route() {
   clearInterval(pageTimer); unsubscribeAll();
   return renderExplore();
 }
+window.ladder = { wallet, conn, C, route }; // debugging handle
 window.addEventListener("hashchange", route);
 renderWalletButton();
 route();
