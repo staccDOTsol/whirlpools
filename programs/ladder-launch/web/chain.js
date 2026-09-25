@@ -2,7 +2,10 @@
 // every number on the page comes from an account or a transaction on mainnet.
 import { PublicKey, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY } from "https://esm.sh/@solana/web3.js@1.98.4?bundle";
 import bs58 from "https://esm.sh/bs58@6.0.0";
+import { Buffer } from "https://esm.sh/buffer@6.0.3";
 export { bs58 };
+// web3.js bundles its own Buffer; instruction data and key compares here need the global.
+if (!globalThis.Buffer) globalThis.Buffer = Buffer;
 
 export const PROGRAM = new PublicKey("6drxnwCC6coNFcB9vNAyCC7wZWLqJrSfoMGZ78G8eEkG");
 export const WHIRLPOOL = new PublicKey("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc");
