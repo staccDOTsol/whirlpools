@@ -262,33 +262,37 @@ export async function fetchNftMints(conn, owner) {
 export async function fetchTape(conn, launch, limit = 25) {
   const sigs = await rpc(conn, "getSignaturesForAddress", [launch.pubkey.toBase58(), { limit, commitment: "confirmed" }]);
   if (!sigs.length) return [];
-  const txs = (await conn._rpcBatchRequest(sigs.map((s) => ({ methodName: "getTransaction", args: [s.signature, { encoding: "json", commitment: "confirmed", maxSupportedTransactionVersion: 0 }] })))).map((r) => r.result);
+  const txs = (await conn._rpcBatchRequest(sigs.map((s) => ({ methodName: "getTransaction", args: [s.signature, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 }] })))).map((r) => r.result);
   const out = [];
   txs.forEach((tx, i) => {
     if (!tx || tx.meta?.err) return;
-    const keys = tx.transaction.message.accountKeys.map(String);
+    const keys = tx.transaction.message.accountKeys.map((k) => String(k.pubkey ?? k));
     const signer = keys[0];
-    for (const ins of tx.transaction.message.instructions) {
-      if (keys[ins.programIdIndex] !== PROGRAM.toBase58()) continue;
+    const userQuote = ata(new PublicKey(signer), launch.quoteMint, launch.quoteTokenProgram).toBase58();
+    tx.transaction.message.instructions.forEach((ins, idx) => {
+      const pid = String(ins.programId ?? keys[ins.programIdIndex]);
+      if (pid !== PROGRAM.toBase58() || !ins.data) return;
       const data = bs58.decode(ins.data);
       const tag = data[0];
       const time = sigs[i].blockTime;
       if (tag === 4) out.push({ kind: "deposit", who: signer, amount: Number(u64(data, 1)), time, sig: sigs[i].signature });
-      else if (tag === 5) {
-        // quote received = post - pre on the signer's quote account
-        const delta = quoteDelta(tx.meta, keys, signer, launch.quoteMint.toBase58());
-        out.push({ kind: "exit", who: signer, amount: delta, time, sig: sigs[i].signature });
-      } else if (tag === 6) out.push({ kind: "collect", who: signer, amount: quoteDelta(tx.meta, keys, signer, launch.quoteMint.toBase58()), time, sig: sigs[i].signature });
-    }
+      else if (tag === 5 || tag === 6) {
+        // Quote paid out = parsed token transfers into the user's quote account inside this
+        // instruction. Balance deltas can't see wrapped SOL that is created and closed in the
+        // same transaction.
+        const inner = (tx.meta.innerInstructions || []).find((x) => x.index === idx)?.instructions || [];
+        let amount = 0;
+        for (const ii of inner) {
+          const p = ii.parsed;
+          if (!p || !/^transfer/.test(p.type || "") || p.info?.destination !== userQuote) continue;
+          amount += Number(p.info.tokenAmount?.amount ?? p.info.amount ?? 0);
+        }
+        out.push({ kind: tag === 5 ? "exit" : "collect", who: signer, amount, time, sig: sigs[i].signature });
+      }
+    });
   });
-  return out;
+  return out; // newest first, as the signature list is
 }
-function quoteDelta(meta, keys, owner, mint) {
-  const find = (arr) => arr.find((b) => b.mint === mint && b.owner === owner);
-  const pre = find(meta.preTokenBalances || []), post = find(meta.postTokenBalances || []);
-  return Number((post?.uiTokenAmount.amount ?? 0)) - Number((pre?.uiTokenAmount.amount ?? 0));
-}
-
 /// Whirlpool `Traded` events for the launch pool, parsed from its transaction history:
 /// [{ time, sqrtPrice, aToB, amountIn, amountOut }] oldest first. Deposits don't trade, so
 /// a launch with no swaps yet has an empty history.
@@ -309,7 +313,9 @@ export async function fetchPriceHistory(conn, launch, limit = 100) {
       out.push({ time: ok[i].blockTime, sig: ok[i].signature, aToB: b[40] === 1, sqrtPrice: u128(b, 57), amountIn: Number(u64(b, 73)), amountOut: Number(u64(b, 81)) });
     }
   });
-  return out.sort((a, b) => a.time - b.time);
+  // `ok` is newest first in block order; reverse for a chronological series. Sorting by
+  // blockTime alone shuffles swaps that share a second.
+  return out.reverse();
 }
 
 // ---------- JSON transport (server endpoints -> browser) ----------
