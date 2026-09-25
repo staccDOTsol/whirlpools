@@ -3,10 +3,11 @@
 import { Connection } from "@solana/web3.js";
 import * as C from "../chain.js";
 
-const LIVE = process.env.RPC_URL || "https://api.mainnet-beta.solana.com";
-const HISTORY = process.env.HISTORY_RPC_URL || LIVE;
-export const live = new Connection(LIVE, "confirmed");
-export const hist = new Connection(HISTORY, "confirmed");
+// Server reads all go to HISTORY_RPC_URL (Triton): 0.1 s per getProgramAccounts against
+// 4 s on the browser's live endpoint. RPC_URL is only the fallback here.
+const HISTORY = process.env.HISTORY_RPC_URL || process.env.RPC_URL || "https://api.mainnet-beta.solana.com";
+export const live = new Connection(HISTORY, "confirmed");
+export const hist = live;
 
 const meta = new Map(); // uri -> { image, description, at }
 async function metaJson(uri) {

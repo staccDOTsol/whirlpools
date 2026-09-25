@@ -177,16 +177,19 @@ async function allSeats() {
 const avatar = (r) => r.meta.image ? `<img class="avatar" data-img="${r.l.tokenMint}" src="${esc(r.meta.image)}" alt="">` : `<div class="avatar" data-img="${r.l.tokenMint}">${esc((r.meta.symbol || "?").slice(0, 3))}</div>`;
 
 // ---------- explore ----------
-let exploreTab = "hot";
+let exploreTab = "hot", routeSeq = 0;
 async function renderExplore() {
+  const token = ++routeSeq;
   app.innerHTML = `<div class="empty">Reading launches from chain…</div>`;
   let rows;
   try { rows = await loadLaunches(); } catch (e) { return showError(e); }
+  if (token !== routeSeq) return;
   let mine = new Set();
   if (exploreTab === "mine" && wallet.pubkey) {
     const nfts = await wallet.nftMints();
     for (const s of await allSeats()) if (nfts.has(s.nftMint.toBase58())) mine.add(s.launch.toBase58());
   }
+  if (token !== routeSeq) return;
   const q = (document.getElementById("q")?.value || "").trim().toLowerCase();
   let list = rows.filter((r) => !q || r.meta.name.toLowerCase().includes(q) || r.meta.symbol.toLowerCase().includes(q) || r.l.tokenMint.toBase58().toLowerCase().startsWith(q));
   if (exploreTab === "hot") list.sort((a, b) => b.quoteIn - a.quoteIn);
@@ -220,7 +223,8 @@ async function renderExplore() {
         `<div class="empty">${exploreTab === "mine" ? (wallet.pubkey ? "No seats in this wallet yet." : "Connect a wallet to see your seats.") : rows.length ? "Nothing matches." : "No launches on chain yet. Be the first: <a href='#/create'>launch a token</a>."}</div>`}
     </div>`;
   app.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { exploreTab = b.dataset.tab; renderExplore(); }));
-  document.getElementById("q").oninput = () => renderExplore();
+  const qEl = document.getElementById("q");
+  if (qEl) qEl.oninput = () => renderExplore();
 }
 
 // ---------- in-place rendering ----------
@@ -275,6 +279,7 @@ function priceChart(series, quote, trades) {
 let pageTimer = null, subs = [];
 function unsubscribeAll() { for (const id of subs) conn.removeAccountChangeListener(id).catch(() => {}); subs = []; }
 async function renderLaunch(mintStr) {
+  const token = ++routeSeq;
   clearInterval(pageTimer); unsubscribeAll();
   let tokenMint;
   try { tokenMint = new PublicKey(mintStr); } catch { app.innerHTML = `<div class="empty">Bad mint address.</div>`; return; }
@@ -290,6 +295,7 @@ async function renderLaunch(mintStr) {
   const drawOnce = async () => {
     let r;
     try { r = await loadLaunch(mintStr, state.fresh); } catch (e) { return showError(e); }
+    if (token !== routeSeq) return;
     state.fresh = false;
     if (!r) { app.innerHTML = `<div class="empty">No launch for this mint.</div>`; return; }
     const l = r.l;
@@ -318,6 +324,7 @@ async function renderLaunch(mintStr) {
     const poolQuote = r.poolQuote, poolTokens = r.poolTokens;
     if (pool) {
       const nfts = wallet.pubkey ? await wallet.nftMints() : new Set();
+      if (token !== routeSeq) return;
       allSeats = r.seats.map((s) => {
         const p = s.position;
         const { a, b } = C.positionAmounts(s.liquidity, s.tickLower, s.tickUpper, pool.sqrtPrice);
@@ -479,6 +486,7 @@ async function uploadImage(name, file) {
   }
 }
 function renderCreate() {
+  ++routeSeq;
   app.innerHTML = `
     <div class="display" style="font-size:28px">Launch a token</div>
     <div class="muted" style="margin-bottom:16px">Token-2022 mint with the metadata inside it, fixed supply, mint and freeze authority gone. Four transactions, one signature prompt.</div>
