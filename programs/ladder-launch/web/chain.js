@@ -269,6 +269,7 @@ export async function fetchTape(conn, launch, limit = 25) {
     const keys = tx.transaction.message.accountKeys.map((k) => String(k.pubkey ?? k));
     const signer = keys[0];
     const userQuote = ata(new PublicKey(signer), launch.quoteMint, launch.quoteTokenProgram).toBase58();
+    const userToken = ata(new PublicKey(signer), launch.tokenMint, TOKEN_2022).toBase58();
     tx.transaction.message.instructions.forEach((ins, idx) => {
       const pid = String(ins.programId ?? keys[ins.programIdIndex]);
       if (pid !== PROGRAM.toBase58() || !ins.data) return;
@@ -281,13 +282,15 @@ export async function fetchTape(conn, launch, limit = 25) {
         // instruction. Balance deltas can't see wrapped SOL that is created and closed in the
         // same transaction.
         const inner = (tx.meta.innerInstructions || []).find((x) => x.index === idx)?.instructions || [];
-        let amount = 0;
+        let amount = 0, tokens = 0;
         for (const ii of inner) {
           const p = ii.parsed;
-          if (!p || !/^transfer/.test(p.type || "") || p.info?.destination !== userQuote) continue;
-          amount += Number(p.info.tokenAmount?.amount ?? p.info.amount ?? 0);
+          if (!p || !/^transfer/.test(p.type || "")) continue;
+          const v = Number(p.info.tokenAmount?.amount ?? p.info.amount ?? 0);
+          if (p.info?.destination === userQuote) amount += v;
+          else if (p.info?.destination === userToken) tokens += v;
         }
-        out.push({ kind: tag === 5 ? "exit" : "collect", who: signer, amount, time, sig: sigs[i].signature });
+        out.push({ kind: tag === 5 ? "exit" : "collect", who: signer, amount, tokens, time, sig: sigs[i].signature });
       }
     });
   });

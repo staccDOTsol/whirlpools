@@ -1,6 +1,6 @@
 // Ladder Launch front end. Every figure on screen is read from mainnet through /api/rpc.
 import { Connection, PublicKey, TransactionMessage, VersionedTransaction, Keypair, SystemProgram, ComputeBudgetProgram } from "@solana/web3.js";
-import * as C from "./chain.js?v=1790357373";
+import * as C from "./chain.js?v=1790357494";
 
 // Live state and sends go straight to the RPC (RPC_URL, served by /api/config so the key is
 // not in the repo). History (signatures, transactions) goes through /api/rpc, which caches.
@@ -345,7 +345,11 @@ async function renderLaunch(mintStr) {
         const nowQuote = (quoteSide + extraTokens * r.price * 10 ** (qdec - r.dec)) / 10 ** qdec;
         const inQuote = Number(s.quoteIn) / 10 ** qdec;
         const feesQuote = p ? Number(l.tokenIsA ? p.feeOwedB : p.feeOwedA) / 10 ** qdec : 0;
-        return { s, p, nowQuote, inQuote, pct: inQuote > 0 ? (nowQuote / inQuote - 1) * 100 : 0, feesQuote, age: now - s.entryTs, young: now - s.entryTs < l.minAgeS, mine: nfts.has(s.nftMint.toBase58()), tokens: tokens / 10 ** r.dec };
+        // What an exit pays right now: the quote side plus tokens beyond the seed (the seed
+        // goes back to the reserve). Below the band that is tokens only.
+        const payQuote = quoteSide / 10 ** qdec, payTokens = extraTokens / 10 ** r.dec;
+        const payout = payQuote >= 0.0005 && payTokens >= 1 ? `${fmt(payQuote, 3)} ${quote} + ${fmtTok(payTokens)} ${r.meta.symbol}` : payTokens >= 1 ? `${fmtTok(payTokens)} ${r.meta.symbol} (≈${fmt(nowQuote, 3)} ${quote})` : `${fmt(payQuote, 3)} ${quote}`;
+        return { s, p, nowQuote, inQuote, pct: inQuote > 0 ? (nowQuote / inQuote - 1) * 100 : 0, feesQuote, age: now - s.entryTs, young: now - s.entryTs < l.minAgeS, mine: nfts.has(s.nftMint.toBase58()), tokens: tokens / 10 ** r.dec, payQuote, payTokens, payout };
       });
       mySeats = allSeats.filter((m) => m.mine).sort((x, y) => y.s.entryTs - x.s.entryTs);
     }
@@ -370,7 +374,7 @@ async function renderLaunch(mintStr) {
             <div style="text-align:right"><div class="muted" style="font-size:12px">price</div><div class="mono" style="font-size:18px">${pool ? r.price.toPrecision(4) : "—"} <span class="muted" style="font-size:12px">${esc(quote)}</span></div></div>
           </div>
           <div class="chart">${pool ? priceChart(series, quote, history.length) : `<div class="empty">No pool yet.</div>`}</div>
-          <div class="tape">${tape.length ? tape.map((t) => `<span><b class="${t.kind === "deposit" ? "accent" : t.kind === "exit" ? "exit" : "muted"}">${t.kind === "deposit" ? "+" : t.kind === "exit" ? "out " : "fees "}${fmt(t.amount / 10 ** qdec, 3)}</b><span class="muted">${short(t.who)} · ${ago(t.time)}</span></span>`).join("") : `<span class="muted">No seats yet. First one sets the tape.</span>`}</div>
+          <div class="tape">${tape.length ? tape.map((t) => { const q = t.amount / 10 ** qdec, tk = (t.tokens || 0) / 10 ** r.dec; const what = t.kind === "deposit" ? `+${fmt(q, 3)}` : `${t.kind === "exit" ? "out " : "fees "}${q >= 0.0005 || tk < 1 ? fmt(q, 3) : ""}${q >= 0.0005 && tk >= 1 ? " + " : ""}${tk >= 1 ? fmtTok(tk) + " " + esc(r.meta.symbol) : ""}`; return `<span><b class="${t.kind === "deposit" ? "accent" : t.kind === "exit" ? "exit" : "muted"}">${what}</b><span class="muted">${short(t.who)} · ${ago(t.time)}</span></span>`; }).join("") : `<span class="muted">No seats yet. First one sets the tape.</span>`}</div>
           <div class="stats">
             <div class="panel"><div class="muted" style="font-size:12px">seats open</div><div class="mono" style="font-size:20px">${l.seatsOpen}</div><div class="muted" style="font-size:12px">${l.nextIndex} taken all time</div></div>
             <div class="panel"><div class="muted" style="font-size:12px">seated ${esc(quote)}</div><div class="mono" style="font-size:20px">${fmt(seatedQuote, 2)}</div><div class="muted" style="font-size:12px">worth ${fmt(seatedNow, 2)} now · ${fmt(r.quoteIn, 2)} in all time</div></div>
@@ -393,7 +397,7 @@ async function renderLaunch(mintStr) {
         <div style="display:flex;flex-direction:column;gap:14px">
           <div class="panel">
             <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="display" style="font-size:16px">Take a seat</span><span class="muted" style="font-size:12px">one tap, no confirm</span></div>
-            ${f ? `<div class="flash" style="margin-top:12px"><div class="display accent" style="font-size:22px">SEATED · #${f.index}</div><div class="muted" style="font-size:12px">${fmt(f.amount, 3)} ${esc(quote)} in · <a href="https://solscan.io/tx/${f.sig}" target="_blank" rel="noopener">tx</a></div></div>` : ""}
+            ${f ? (f.kind === "exit" ? `<div class="flash" style="margin-top:12px"><div class="display accent" style="font-size:22px">CASHED OUT</div><div class="muted" style="font-size:12px">${esc(f.text)}</div></div>` : `<div class="flash" style="margin-top:12px"><div class="display accent" style="font-size:22px">SEATED · #${f.index}</div><div class="muted" style="font-size:12px">${fmt(f.amount, 3)} ${esc(quote)} in · <a href="https://solscan.io/tx/${f.sig}" target="_blank" rel="noopener">tx</a></div></div>`) : ""}
             <div class="tiles" style="margin-top:12px">
               ${tiles.map((amt, i) => `<button class="tile ${i === 1 ? "main" : ""}" data-amt="${amt}" ${!l.ready || state.busy ? "disabled" : ""}><b>${amt}</b><small>${esc(quote)}</small><small>${pool ? fmtTok(preview(amt)) + " " + esc(r.meta.symbol) : ""}</small></button>`).join("")}
             </div>
@@ -412,9 +416,10 @@ async function renderLaunch(mintStr) {
                   </div>
                   <div class="actions">
                     <button class="btn solid" data-collect="${m.s.pubkey}" ${state.busy ? "disabled" : ""}>Collect${m.feesQuote > 0 ? ` +${fmt(m.feesQuote, 4)}` : ""}</button>
-                    <button class="btn danger" data-exit="${m.s.pubkey}" ${state.busy || m.young ? "disabled" : ""}>${m.young ? `wait ${Math.max(0, l.minAgeS - m.age) | 0}s` : state.armed === m.s.pubkey.toBase58() ? `Tap again · ${fmt(m.nowQuote, 3)}` : `Cash out ${fmt(m.nowQuote, 3)}`}</button>
+                    <button class="btn danger" data-exit="${m.s.pubkey}" ${state.busy || m.young ? "disabled" : ""}>${m.young ? `wait ${Math.max(0, l.minAgeS - m.age) | 0}s` : state.armed === m.s.pubkey.toBase58() ? `Tap again` : `Cash out`}</button>
                   </div>
-                  ${state.armed === m.s.pubkey.toBase58() ? `<div class="muted" style="font-size:12px">Second tap is final. Burns the seat.</div>` : ""}
+                  <div class="muted" style="font-size:12px">${m.payTokens >= 1 && m.payQuote < 0.0005 ? `Below your band, so this pays tokens: ` : `Pays `}<span class="mono" style="color:var(--text)">${esc(m.payout)}</span>${m.payTokens >= 1 ? `; seeded tokens go back to the reserve.` : `.`}</div>
+                  ${state.armed === m.s.pubkey.toBase58() ? `<div class="exit" style="font-size:12px">Second tap is final. Burns the seat.</div>` : ""}
                 </div>`).join("") || `<div class="muted" style="font-size:13px">${wallet.pubkey ? "No seats in this launch yet." : ""}</div>`}
             </div>
           </div>
@@ -433,7 +438,8 @@ async function renderLaunch(mintStr) {
     app.querySelectorAll("[data-amt]").forEach((b) => (b.onclick = () => seat(+b.dataset.amt)));
     document.getElementById("custom-go").onclick = () => { const v = parseFloat(document.getElementById("custom").value); if (v > 0) seat(v); };
     const seat = (amt) => { if (!wallet.pubkey) return connectFlow(); run(`Seating ${amt} ${quote}…`, async () => { const res = await deposit(l, pool, amt); state.flash = { ...res, amount: amt }; }); };
-    app.querySelectorAll("[data-exit]").forEach((b) => (b.onclick = () => { const id = b.dataset.exit; if (state.armed !== id) { state.armed = id; draw(); return; } run("Cashing out…", () => exitSeat(l, pool, seatsById.get(id))); }));
+    const payoutById = new Map(mySeats.map((m) => [m.s.pubkey.toBase58(), m.payout]));
+    app.querySelectorAll("[data-exit]").forEach((b) => (b.onclick = () => { const id = b.dataset.exit; if (state.armed !== id) { state.armed = id; draw(); return; } run("Cashing out…", async () => { await exitSeat(l, pool, seatsById.get(id)); state.flash = { kind: "exit", text: `${payoutById.get(id)} in your wallet` }; }); }));
     app.querySelectorAll("[data-collect]").forEach((b) => (b.onclick = () => run("Collecting fees…", () => collect(l, pool, seatsById.get(b.dataset.collect)))));
   };
   await draw();
